@@ -605,11 +605,12 @@ module.exports = {
                             // Password: password,
                             Enabled: true,
                             Deleted: false,
-                        }, function (err, user) {
-                            if (err) { return done(err); }
+                        }).then((user) => {
                             if (!user) { return done(null, false); }
                             if (!verifyPassword(password, user.Password, m.config.pwdEncryptMethod || 'md5')) { return done(null, false); }
                             return done(null, user);
+                        }).catch((err) => {
+                            return done(err);
                         });
                 }
             ));

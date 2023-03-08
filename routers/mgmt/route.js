@@ -77,7 +77,7 @@ router.get('/', async (req, res, next) => {
         for (let i = 0; i < res.locals.data.docs.length; i += 1) {
             const doc = res.locals.data.docs[i];
             if (doc && doc.Org) {
-                const org = await app.models.organization.findOne({ id: doc.Org });
+                const org = await res.app.models.organization.findOne({ id: doc.Org });
                 if (org) {
                     doc.Org = {
                         id: org.id,
@@ -172,13 +172,13 @@ router.post('/audit',
         // set permission 
         // try to use default account permission in the config first
         // if not found use the permission of the org of the account (if have org module loaded)
-        if (req.body.Status === app.modules.account.AccountAuditStatus.Passed && req.body.id) {
-            const account = await app.models.account.findOne({ id: req.body.id });
+        if (req.body.Status === res.app.modules.account.AccountAuditStatus.Passed && req.body.id) {
+            const account = await res.app.models.account.findOne({ id: req.body.id });
             if (account && account.Org) {
-                const accountOrg = await app.models.organization.findOne({ id: account.Org });
+                const accountOrg = await res.app.models.organization.findOne({ id: account.Org });
                 if (accountOrg && accountOrg.Permission) {
                     const p = Object.assign({}, accountOrg.Permission);
-                    if (app.modules.account.utils.clearPermission(p)) {
+                    if (res.app.modules.account.utils.clearPermission(p)) {
                         const op = res.locals.CURD.find(op => op.method === 'U' && op.model === 'account');
                         if (op) {
                             op.ctx.body.Permission = p;
