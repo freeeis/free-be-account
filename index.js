@@ -990,6 +990,7 @@ module.exports = {
                     UserName: m.config.defaultAccountName || 'admin',
                     Password: crypto.MD5(m.config.defaultAccountPwd) || 'f6fdffe48c908deb0f4c3bd36c032e72',
                     Permission: perms,
+                    Saved: true,
                     Status: AccountAuditStatus.Passed,
                     Profile: {
                         Name: 'SuperAdmin'
