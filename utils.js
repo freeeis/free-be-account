@@ -147,7 +147,11 @@ async function saveServiceList (app, clean=false) {
                 };
                 if (parent) newDoc.Parent = parent;
 
-                newCreated = await app.models.permission.create(newDoc);
+                try{
+                    newCreated = await app.models.permission.create(newDoc);
+                } catch(ex) {
+                    app.logger.error(ex.message);
+                }
             } else {
                 newCreated = (await app.models['permission'].findOne({ Name: p, Path: `${pt}/${p}`}));
                 

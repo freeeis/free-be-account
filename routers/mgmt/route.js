@@ -59,19 +59,27 @@ router.get('/', async (req, res, next) => {
         'Enabled',
         'Org',
         'Labels',
+        'Status'
     ];
 
     res.locals.filter = Object.assign({ Saved: true }, res.app.modules['core-modules'].generateQueryFilter(accountFilters, req.query), res.locals.filter);
 
-    res.locals.data.summary = {};
-    res.locals.data.summary.auditing = await res.app.models['account'].countDocuments({...res.locals.filter, Status: AccountAuditStatus.Auditing });
-    res.locals.data.summary.passed = await res.app.models['account'].countDocuments({...res.locals.filter, Status: AccountAuditStatus.Passed });
-    res.locals.data.summary.failed = await res.app.models['account'].countDocuments({...res.locals.filter, Status: AccountAuditStatus.Failed });
-
+    // add summary
+    if (router.mdl.config.accountRequireAudit) {
+        res.locals.data.summary = {};
+        res.locals.data.summary.auditing = await res.app.models['account'].countDocuments({...res.locals.filter, Saved: true, Status: AccountAuditStatus.Auditing });
+        res.locals.data.summary.passed = await res.app.models['account'].countDocuments({...res.locals.filter, Saved: true, Status: AccountAuditStatus.Passed });
+        res.locals.data.summary.failed = await res.app.models['account'].countDocuments({...res.locals.filter, Saved: true, Status: AccountAuditStatus.Failed });
+    }
+    
     return next();
 
 }, router.FindDocuments('account', false, async (req, res) => {
     res.locals.data.Filters = accountFilters;
+
+    res.locals.data.summary = {};
+    res.locals.data.summary.passed = await res.app.models['account'].countDocuments({ Saved: true, Enabled: true });
+    res.locals.data.summary.failed = await res.app.models['account'].countDocuments({ Saved: true, Enabled: false });
 
     if (res.locals.data && res.locals.data.total) {
         for (let i = 0; i < res.locals.data.docs.length; i += 1) {
@@ -122,13 +130,26 @@ router.get('/:id',
 router.post('/', 
     (req, res, next) => {
         req.body.Status = AccountAuditStatus.Passed;
+        req.body.Saved = true;
 
         if (req.body.Permission) {
             if (!clearPermission(req.body.Permission)) {
                 req.body.Permission = {};
             }
+
+            // permission changed, clear cached account permission
+            router.mdl.clearCachedPermission(res.app, req.body.id);
         }
 
+        // make sure the provided permission is in the scope of the current user permission!!
+        if(req.user.Permission){
+            if(req.user.Permission !== '*') {
+                req.body.Permission = Object.intersection(req.body.Permission, req.user.Permission);
+            }
+        } else {
+            delete req.body.Permission;
+        }
+        
         // pwd
         if (req.body.Password) {
             const password = crypto.encoder.desDecode(req.body.Password, router.mdl.config.desKey);
@@ -194,6 +215,33 @@ router.post('/audit',
 );
 
 router.put('/',
+    (req, res, next) => {
+        if (req.body.Permission) {
+            if (!clearPermission(req.body.Permission)) {
+                req.body.Permission = {};
+            }
+
+            // permission changed, clear cached account permission
+            router.mdl.clearCachedPermission(res.app, req.body.id);
+        }
+
+        // make sure the provided permission is in the scope of the current user permission!!
+        if(req.user.Permission){
+            if(req.user.Permission !== '*') {
+                req.body.Permission = Object.intersection(req.body.Permission, req.user.Permission);
+            }
+        } else {
+            delete req.body.Permission;
+        }
+
+        // pwd
+        if (req.body.Password) {
+            const password = crypto.encoder.desDecode(req.body.Password, router.mdl.config.desKey);
+            req.body.Password = encryptPwd(password, router.mdl.config.pwdEncryptMethod || 'md5');
+        }
+
+        return next();
+    },
     router.UpdateDocument('account', false, (req, res) => {
         // clear return data
         if (res.locals.data && res.locals.data.id) {
@@ -254,7 +302,7 @@ router.get(`/search`,
             res.locals.filter.id = req.query.id;
         }
         else if (req.query.search) {
-            let keyword = RegExp.quote(req.query.search);
+            let keyword = RegExp.quote(req.query.search, 'i');
             res.locals.filter.$or = [
                 { Name: keyword },
             ];

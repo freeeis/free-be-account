@@ -1,4 +1,15 @@
+const fs = require('fs');
+const path = require('path');
 const AliyunCore = require('@alicloud/pop-core');
+const nodemailer = require('nodemailer');
+
+let global;
+
+if (fs.existsSync(path.resolve(__dirname, '../../global.js'))) {
+    global = require('../../global');
+}
+
+let MAIL_TRANS = undefined;
 
 function _generateMSG (f = '4n') {
     if (typeof f !== 'string' || f.length < 2) {
@@ -79,12 +90,47 @@ const _sms_lib = {
         send: async function () {
             return true;
         }
-    }
+    },
+    mail: {
+        send: async function(k, p, v) {
+            if(!k || !k.host || !k.secret || !k.mail || !k.from || !k.title) throw new Error('MMail configuration incorrect!');
+            
+            MAIL_TRANS = MAIL_TRANS || nodemailer.createTransport({ 
+                host: k.host, 
+                secureConnection: true,
+                port: 465,
+                secure: true, 
+                auth: {
+                    user: k.mail,
+                    pass: k.secret,
+                }
+            });
+
+            const result = await MAIL_TRANS.sendMail({ 
+                from: k.from,
+                to: p,
+                subject: k.title,
+                html: typeof k.template === 'function' ? k.template(v) : k.template,
+                envelope: {
+                    from: k.from,
+                    to: p,
+                    cc: k.from,
+                }
+            });
+
+            return result && result.accepted && result.accepted.length >= 1;
+        }
+    },
 }
 
 module.exports = (app) => ({
     send: async function (p, value, c = true, t = 'default') {
-        const keys = app.config.account.sms[t] || app.config.account.sms;
+        if (p.indexOf('@') > 0) {
+            t = `${t}_mail`;
+        }
+
+        const keys = (global && global.sms && global.sms[t]) || app.modules.account.config.sms.keys[t] || app.modules.account.config.sms.keys;
+        
         if (keys.platform) {
             // if the cached code still there, we should not re-send!
             if (await app.cache.get(p)) {

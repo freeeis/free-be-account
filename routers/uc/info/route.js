@@ -69,27 +69,35 @@ router.post('/edit', async (req, res, next) => {
 });
 
 // submit to audit
-router.post('/submit', async (req, res, next) => {
-    const user = req.user;
+router.post('/submit', 
+    (req, res, next) => {
+        const user = req.user;
 
-    // save changes first
-    if (req.body.Profile) {
-        user.Profile = Object.assign(user.Profile, req.body.Profile);
-    }
+        // save changes first
+        res.locals.body = {};
+        if (req.body.Profile) {
+            res.locals.body.Profile = {...user.Profile, ...req.body.Profile};
+        }
 
-    user.Status = res.app.modules.account.AccountAuditStatus.Auditing;
+        res.locals.body.Status = res.app.modules.passport.AccountAuditStatus.Auditing;
 
-    // set to default permission 
-    const p = res.app.modules.account.config.accountDefaultPermissions;
-    res.app.modules.account.utils.clearPermission(p);
-    user.Permission = p;
+        // set to default permission 
+        const p = res.app.modules.passport.config.accountDefaultPermissions;
+        res.app.modules.passport.utils.clearPermission(p);
+        res.locals.body.Permission = p;
 
-    // save
-    await user.save();
+        res.locals.filters = { id: req.user.id };
+        res.locals.fields = [
+            'Profile',
+            'Status',
+            'Permission',
+        ];
 
-    res.addData({});
+        res.addData({});
 
-    return next();
-});
+        return next();
+    },
+    router.UpdateDocument('account'),
+);
 
 module.exports = router;

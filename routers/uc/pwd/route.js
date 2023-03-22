@@ -31,11 +31,17 @@ router.put('/',
         }
         const password = res.app.modules.account.utils.crypto.encoder.desDecode(req.body.Password, res.app.modules.account.config.desKey);
 
-        req.user.Password = res.app.modules.account.utils.encryptPwd(password, res.app.modules.account.config.pwdEncryptMethod || 'md5');
-        await req.user.save();
+        res.locals.body = {};
+        res.locals.body.Password = res.app.modules.passport.utils.encryptPwd(password, res.app.modules.passport.config.pwdEncryptMethod || 'md5');
+
+        res.locals.filters = { id: req.user.id };
+        res.locals.fields = [
+            'password',
+        ];
 
         return next();
-    }
+    },
+    router.UpdateDocument('account'),
 );
 
 module.exports = router;

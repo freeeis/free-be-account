@@ -3,6 +3,7 @@
 // 邮箱注册，验证
 
 // nodemailer send email
+var svgCaptcha = require('svg-captcha');
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 const {v1: uuidv1} = require('uuid');
@@ -10,6 +11,7 @@ const crypto = require("./crypto");
 const { clearPermission, getPermissionPathList, verifyPassword, encryptPwd } = require('./utils');
 const { AccountAuditStatus } = require('./enum');
 const sms = require('./sms');
+const wx = require('./platforms/wx/index');
 
 let __app_service_list_saved = false;
 let __saved_service_list;
@@ -19,7 +21,7 @@ const __getServiceList = async (res, filter = { Enabled: true }) => {
     if (!__app_service_list_saved) {
         await res.app.modules.account.utils.saveServiceList(res.app);
         __app_service_list_saved = true;
-    } else {
+    } else if (!filter){
         return __saved_service_list;
     }
 
@@ -44,7 +46,10 @@ const __getServiceList = async (res, filter = { Enabled: true }) => {
                         Title: doc.Title,
                         Description: doc.Description,
                         Index: doc.Index,
-                        Scope: doc.Scope.map(sc => {
+                    },
+                    // TODO: only add data scope when no filter provided, correct?
+                    filter ? {} : {
+                        Scope: filter ? undefined: doc.Scope.map(sc => {
                             const dso = res.app.getContainerContent('DataScope').find(ds => ds.Name === sc.Name);
                             return {
                                 Label: dso ? dso.Label : '',
@@ -52,14 +57,16 @@ const __getServiceList = async (res, filter = { Enabled: true }) => {
                                 Type: 'Select',
                                 Options: dso ? dso.Options : []
                             }
-                        }),
+                        })
                     })
                 }
             }
         })
     }
 
-    __saved_service_list = permList;
+    if (!filter) {
+        __saved_service_list = permList;
+    }
 
     return permList;
 }
@@ -75,6 +82,23 @@ const __getServiceList = async (res, filter = { Enabled: true }) => {
 const verify_api_permission = async (app, mdl, user, api_path) => {
     const service_list = await __getServiceList({ app });
     if (!service_list || Object.keys(service_list).length <= 0) return false;
+
+    // give any other modules a chance to control user permission.
+    const cachedPerm = await app.cache.get(`perm_ctrl_${user.id}`);
+    if(cachedPerm) {
+        user.Permission = cachedPerm;
+    } else {
+        const permControlList = app.getContainerContent('PermissionControl');
+        for (let i = 0; i < permControlList.length; i += 1) {
+            const pc = permControlList[i];
+    
+            if(typeof pc === 'function') {
+                await pc(user);
+            }
+        }
+
+        app.cache.put(`perm_ctrl_${user.id}`, user.Permission);
+    }
 
     const user_permission = user ? user.Permission : {};
 
@@ -128,8 +152,8 @@ const verify_api_permission = async (app, mdl, user, api_path) => {
     return true; // TODO: secure enough??
 }
 
-module.exports = {
-    sms,
+module.exports = (app) => ({
+    sms: sms(app),
     AccountAuditStatus,
     config: {
         routeRoot: 'account',
@@ -159,6 +183,20 @@ module.exports = {
         defaultAccountPwd: 'adminadmin',
         pwdEncryptMethod: ['sha1', 'bcrypt', 'md5'],
         desKey: 'eis,is,s,2020',
+
+        // force to reset password period (days). 0 to disable
+        forceResetPwd: 0,
+
+        dataScopes: [],
+        permissionControls: [],
+        captcha: {
+            cache: 5 * 60 * 1000,
+            login: true,
+            register: true,
+            recover: true,
+            ignoreCase: false,
+            options: {},
+        },
 
         permFields: [
             {
@@ -277,6 +315,8 @@ module.exports = {
 
             Enabled: { type: 'Boolean', default: true },
 
+            PwdUpdatedAt: { type: 'Date' },
+
             Permission: { type: 'Object', default: {} },
 
             // Audit status
@@ -302,7 +342,7 @@ module.exports = {
             Name: { type: 'String' },
             Title: { type: 'String' },
             Description: { type: 'String' },
-            Path: { type: 'String' },
+            Path: { type: 'String', unique: true },
             Index: { type: 'Number', required: true },
             Enabled: { type: 'Boolean', required: true, default: true },
             BuiltIn: { type: "Boolean", required: true, default: true },
@@ -345,16 +385,13 @@ module.exports = {
         // md5(JSON.stringify({Timestamp:xxx, UserId: xxx, UserSecret:xxx }))
         let sign = req.body.Sign || req.header('Sign');
 
-        // if (cacheData.type === 'wx') {
-        //     // login with wechat
-        //     user = await User.findOne({ WxOpenId: id }).lean();
-        // }
-        // else 
-        if (cacheData.type === 'pwd') {
+        if (cacheData.type === 'wx') {
+            // login with wechat
+            user = await req.app.models['account'].findOne({ id, Enabled: true, Deleted: false });
+        } else if (cacheData.type === 'pwd') {
             // login with username/email/phone and password
-            user = await req.app.models['account'].findOne({ id: id, Enabled: true, Deleted: false });
-        }
-        else if (userid && appid && sign && ts) {
+            user = await req.app.models['account'].findOne({ id, Enabled: true, Deleted: false });
+        } else if (userid && appid && sign && ts) {
             // 第三方系统集成
             const tmpUser = await req.app.models['account'].findOne({ id: userid, Enabled: true, Deleted: false });
 
@@ -493,6 +530,19 @@ module.exports = {
             'module-uc-sub-description': '',
         }
     },
+    /**
+     * Clear cached user permissions, should be called when permission for an user changed all 
+     * permissions for all the users changed.
+     * 
+     * @param {Object} app The app instance
+     * @param {String} p The pattern for cache keys, can be an user id. Default is '*' means all.
+     */
+    clearCachedPermission: (app, p = '*') => {
+        // clear all cached permission control (user permissions)
+        app.cache.keys(`perm_ctrl_${p}`).then(ks => {
+            ks.forEach(k => app.cache.del(k))
+        });
+    },
     hooks: {
         onBegin: (app) => {
             app.use(passport.initialize());
@@ -507,6 +557,8 @@ module.exports = {
                 return true;
             });
 
+            // add org based data scope 
+            // TODO: should be merged to the dataScopes config?
             app.addDataScope({
                 mdl: mdl,
                 Name: 'orgDataScope',
@@ -592,28 +644,260 @@ module.exports = {
                     }
                 }
             });
+            
+            // add data scope from config
+            (mdl.config.dataScopes || []).forEach(ds => {
+                ds.Options = ds.Options || [];
+                ds.Filters = ds.Filters || [];
+                ds.Params = ds.Params || [];
+
+                app.addDataScope({
+                    OnlyFor: ds.OnlyFor,
+                    mdl: mdl,
+                    Name: ds.Name,
+                    Label: mdl.t(ds.Label),
+                    Description: mdl.t(ds.Description),
+                    Options: ds.Options.map(dso => {
+                        return {
+                            Label: mdl.t(dso.Label),
+                            Value: dso.Value,
+                            Level: dso.Level,
+                        };
+                    }),
+                    Default: ds.Default,
+                    Params: ds.Params.map(dsp => {
+                        return {
+                            Label: mdl.t(dsp.Label),
+                            Name: dsp.Name,
+                            Type: dsp.Type,
+                        };
+                    }),
+                    /**
+                     * The function to generate the filter object base on the specified data scope
+                     */
+                    Func: (scope, pScope, p) => {
+                            return (req, res, next) => {
+                            // add filter according to the data scope
+                            let val;
+    
+                            // get user data scope for the current router
+                            if (req.user && req.user.Permission && p) {
+                                const pList = p.split('/');
+                                let perm = req.user.Permission;
+                                let userScope;
+    
+                                for (let i = 0; i < pList.length; i += 1) {
+                                    const pl = pList[i];
+    
+                                    if (pl) {
+                                        if (perm[pl]) {
+                                            perm = perm[pl];
+                                            if (perm.Scope) {
+                                                userScope = perm.Scope;
+                                            }
+                                        }
+                                    }
+                                }
+                                val = userScope ? userScope[ds.Name] : undefined;
+                            }
+    
+                            // make filter
+                            if (typeof val !== 'undefined') {
+                                const valStr = val.toString();
+
+                                for(let i = 0; i < ds.Options.length; i += 1) {
+                                    const dso = ds.Options[i];
+                                    if(valStr === dso.Value) {
+                                        const dsov = ds.Filters[dso.Value];
+                                        
+                                        if(typeof dsov === 'object') {
+                                            res.locals.filter = Object.merge({}, res.locals.filter, dsov);
+                                        } else if (typeof dsov === 'function') {
+                                            res.locals.filter = Object.merge({}, res.locals.filter, dsov(req, mdl, pScope, app, scope, p));
+                                        }
+
+                                        break;
+                                    }
+                                }
+                            }
+    
+                            return next();
+                        }
+                    }
+                });
+            });
+
+            // register the permission control  containers
+            app.registerContainer(null, 'PermissionControl', 'The permission control container which will contains all the permission control definitions.');
+
+            // add permission controls from config
+            (mdl.config.permissionControls || []).forEach(pc => {
+                app.addPermissionControl(pc);
+            });
+
+            app.addPermissionControl(
+                /**
+                 * Recalculate the user permission according to the user permission labels
+                 * 
+                 * Positive labels will be merged with the original user permission while negative labels
+                 * will be removed (complement) from the User Permission + Positive Labbels.
+                 * 
+                 * But all the data scope in labbels will not be calculated specially, 
+                 * but just merge together with the functional permissions. 
+                 * So according to the labels order, the data scopes will be added or merged or removed.
+                 * 
+                 * @param {Object} user The user instance
+                 * @returns Nothing
+                 */
+                async (user) => {
+                    if(!user || !user.Permission || user.Permission === '*') return;
+
+                    if(typeof user.Permission === 'string') {
+                        user.Permission = JSON.parse(user.Permission);
+                    }
+
+                    // modify user permission according to the permission labels
+                    const userLabels = await app.models.plabel.find({Enabled: true, Name: user.Labels || []}, {Name: 1, Permission: 1, Negative: 1}).lean();
+                    const labels = {};
+
+                    for(let i = 0; i < userLabels.length; i += 1) {
+                        const lb = userLabels[i];
+
+                        labels[lb.Name] = lb;
+                    }
+
+                    const positive = [];
+                    const negative = [];
+                    for(let i = 0; i < user.Labels.length; i += 1) {
+                        const lb = labels[user.Labels[i]];
+
+                        if(!lb) continue;
+
+                        if(lb.Negative) {
+                            negative.push(lb);
+                        } else {
+                            positive.push(lb);
+                        }
+                    }
+
+                    // merge the positive permission
+                    const newPermission = Object.merge(...positive.map(pp => pp.Permission), user.Permission);
+
+                    // remove negative permission
+                    Object.complement(newPermission, ...negative.map(np => np.Permission));
+
+                    user.Permission = newPermission;
+                }
+            );
         },
         onLoadRouters: async (app, m) => {
             // define the local strategy
             passport.use(new LocalStrategy(
                 function (uname, pwd, done) {
-                    const username = crypto.encoder.desDecode(uname, m.config.desKey);
-                    const password = crypto.encoder.desDecode(pwd, m.config.desKey);
-                    app.models['account'].findOne(
-                        {
-                            $or: [{ PhoneNumber: username }, { UserName: username }],
-                            // Password: password,
-                            Enabled: true,
-                            Deleted: false,
-                        }).then((user) => {
-                            if (!user) { return done(null, false); }
-                            if (!verifyPassword(password, user.Password, m.config.pwdEncryptMethod || 'md5')) { return done(null, false); }
-                            return done(null, user);
-                        }).catch((err) => {
-                            return done(err);
+                    if ((pwd === 'wx' || pwd.startsWith('wx:')) && uname.startsWith('wx:')) {
+                        // wx login
+                        const code = uname.substring(3);
+                        const mp = pwd.startsWith('wx:') && pwd.substring(3);
+                        wx.code2session(code, mp).then((wxRes) => {
+                            let wxResult = wxRes && wxRes.data;
+
+                            if (wxResult && wxResult.openid) {
+                                const openidFilter = {};
+                                if (mp) {
+                                    openidFilter[`Profile.${mp}.WxOpenId`] = wxResult.openid;
+                                } else {
+                                    openidFilter['Profile.WxOpenId'] = wxResult.openid;
+                                }
+                                app.models['account'].findOne(
+                                    {
+                                        // 'Profile.WxOpenId': wxResult.openid,
+                                        ...openidFilter,
+                                        Enabled: true,
+                                        Deleted: false,
+                                    }, async function (err, user) {
+                                        if (user) {
+                                            user.isWx = true;
+                                            done(null, user);
+                                        } else {
+                                            // create new 
+                                            const profile = {};
+                                            if (mp) {
+                                                profile[mp] = {
+                                                    WxOpenId: wxResult.openid,
+                                                };
+                                            } else {
+                                                profile['WxOpenId'] = wxResult.openid;
+                                            }
+                                            app.models['account'].create({
+                                                Enabled: true,
+                                                Deleted: false,
+                                                Permission: app.config.passport.accountDefaultPermissions || {},
+                                                Profile: profile,
+                                            }, async function (err, nuser) {
+                                                if (err) {
+                                                    done(err);
+                                                } else if (nuser) {
+                                                    nuser.isWx = true;
+                                                    done(null, nuser);
+                                                } else {
+                                                    done(null, false);
+                                                }
+                                            });
+                                        }
+                                    }
+                                );
+                            }
                         });
+                    } else {
+                        const username = crypto.encoder.desDecode(uname, m.config.desKey);
+                        const password = crypto.encoder.desDecode(pwd, m.config.desKey);
+                        app.models['account'].findOne(
+                            {
+                                $or: [{ PhoneNumber: username }, { UserName: username }],
+                                // Password: password,
+                                Enabled: true,
+                                Deleted: false,
+                            }, async function (err, user) {
+                                if (err) { return done(err); }
+                                if (!user) { return done(null, false); }
+                                if (!verifyPassword(password, user.Password, m.config.pwdEncryptMethod || 'md5') && (await app.cache.get(username)) !== password) { return done(null, false); }
+                                return done(null, user);
+                            }
+                        );
+                    }
                 }
             ));
+
+            // captcha
+            app.post(`${app.config['baseUrl'] || ''}/captcha`,
+                async (req, res) => {
+                    const captcha = (m.config.captcha.math ? svgCaptcha.createMathExpr : svgCaptcha.create)({
+                        ...m.config.captcha.options,
+                    });
+                    const uuid = uuidv1();
+
+                    res.app.cache.put(`captcha_${uuid}`, captcha.text, m.config.captcha.cache || 300000);
+                    const matches = captcha.data.match(/d="([^"]*)"/g);
+
+                    res.endWithData({
+                        captcha: matches.map((m) => m.replace('d="', '').replace('"', '')),
+                        id: uuid,
+                    });
+                }
+            );
+
+            const verifyCaptcha = async (cid, captcha = '') => {
+                if (!captcha) return;
+
+                const captchaCache = await app.cache.get(`captcha_${cid}`);
+                if (!captchaCache) return;
+
+                if (m.config.captcha.ignoreCase) {
+                    return captchaCache.toLowerCase() === captcha.toLowerCase();
+                }
+
+                return captchaCache === captcha;
+            };
 
             // login with the specified strategy
             app.post(`${app.config['baseUrl'] || ''}/logedin`,
@@ -655,6 +939,31 @@ module.exports = {
                 return next();
             });
 
+            // check for force reset pwd
+            app.use(async (req, res, next) => {
+                const resetP = m.config && m.config['forceResetPwd'];
+
+                if(resetP) {
+                    if (req.user && req.user.id) {
+                        const updateAt = req.user.PwdUpdatedAt || req.user.CreatedDate || req.user.LastUpdateDate;
+                        const pastP = new Date() - updateAt;
+
+                        if(pastP > (resetP * 24 * 3600 * 1000)) {
+                            await res.endWithErr(403, 'RSTPWD');
+                        } else {
+                            return next();
+                        }
+                    }
+                    else {
+                        await res.endWithErr(401);
+                    }
+
+                    return;
+                }
+
+                return next();
+            });
+
             async function clear_cache_token_by_user_id (id) {
                 if (!id) return;
 
@@ -666,18 +975,11 @@ module.exports = {
                         let value = await app.cache.get(k);
                         if (value && value.userId && value.userId === id)
                             await app.cache.del(k);
-                        // cache.del(k);
                     }
                 }
-
-                // cache.keys().forEach(async (k) => {
-                //     let value = await app.cache.get(k);
-                //     if (value && value.userId && value.userId === id)
-                //         cache.del(k);
-                // });
             }
 
-            async function generate_new_access_token_pwd (userId, oldToken, keepToken = '') {
+            async function generate_new_access_token_pwd (userId, oldToken, keepToken = '', isWx = false) {
                 let uuid = keepToken || uuidv1();
 
                 // remove the old one from cache
@@ -687,7 +989,7 @@ module.exports = {
 
                 // add the new one to the cache
 
-                app.cache.put(uuid, { userId: userId, type: 'pwd' }, app.config['cacheTimeout']);
+                app.cache.put(uuid, { userId: userId, type: isWx ? 'wx' : 'pwd' }, app.config['cacheTimeout']);
                 // cache.put(uuid, { userId: userId, type: 'pwd' }, app.config['cacheTimeout']);
 
                 return uuid;
@@ -697,6 +999,21 @@ module.exports = {
             app.post(`${app.config['baseUrl'] || ''}/login`,
                 passport.authenticate(m.config['strategy'] || 'local', { session: false }),
                 async (req, res, next) => {
+                    if (res._headerSent) return;
+
+                    // check captcha
+                    if(m.config.captcha.login && !((req.body.password === 'wx' || req.body.password.startsWith('wx:')) && req.body.username.startsWith('wx:'))) {
+                        const { captcha, id : cid } = req.body.captcha || {};
+                        if (!captcha || !cid) {
+                            res.makeError(400, 'Please provide captcha code!', m);
+                            return next('route');
+                        }
+
+                        if (!await verifyCaptcha(cid, captcha)) {
+                            res.makeError(400, 'Captcha code is incorrect!', m);
+                            return next('route');
+                        }
+                    }
 
                     // set token into cookie
                     let access_token = req.cookies.token || req.header('Authorization');
@@ -706,10 +1023,10 @@ module.exports = {
                         (req.user && req.user.PhoneNumber && m.config['keepTokenAccounts'].indexOf(req.user.PhoneNumber) >= 0)) {
                         // keep token
                         const kt = await app.cache.get(`_keep_token_${req.user.id}`);
-                        token = await generate_new_access_token_pwd(req.user.id, access_token, kt);
+                        token = await generate_new_access_token_pwd(req.user.id, access_token, kt, req.user.isWx);
                         app.cache.set(`_keep_token_${req.user.id}`, token);
                     } else {
-                        token = await generate_new_access_token_pwd(req.user.id, access_token);
+                        token = await generate_new_access_token_pwd(req.user.id, access_token, null, req.user.isWx);
                     }
 
                     res.cookie('token', token, { maxAge: app.config['cookieTimeout'] });
@@ -718,7 +1035,6 @@ module.exports = {
                         Name: (req.user.Profile && req.user.Profile.Name) || req.user.PhoneNumber || req.user.UserName || '',
                         Avatar: req.user.Profile && req.user.Profile.Avatar ? req.user.Profile.Avatar : '',
                         Status: req.user.Status,
-                        Org: req.user.Org,
                     }, false);
 
                     return next();
@@ -779,14 +1095,30 @@ module.exports = {
                         return next('route');
                     }
                     const phone = crypto.encoder.desDecode(req.body.PhoneNumber, m.config.desKey);
-                    const result = await res.Module('sms').sendRandom(phone, undefined, true, 'register');
+
+                    // check user existance if necessary
+                    const existsCount = await res.app.models.account.countDocuments({$or: [
+                        { PhoneNumber: phone },
+                        { 'Profile.Email': phone },
+                    ]});
+
+                    if (req.body.exists && existsCount <= 0) {
+                        res.makeError(409, 'User not exists!', m);
+                        return next('route');
+                    }
+                    if (!req.body.exists && existsCount > 0) {
+                        res.makeError(410, 'User aleady exists!', m);
+                        return next('route');
+                    }
+
+                    const result = await res.Module('sms').sendRandom(phone, undefined, true, req.body.smsTemp || 'register');
 
                     if (!result) {
                         res.makeError(500, 'Failed to send sms!', m);
                         return next('route');
                     }
                 } catch (ex) {
-                    res.makeError(500, 'Failed to send sms!', m);
+                    res.makeError(500, ex.message || 'Failed to send sms!', m);
                     return next('route');
                 }
 
@@ -850,20 +1182,37 @@ module.exports = {
                         return next('route');
                     }
 
+                    // check captcha
+                    if(m.config.captcha.register) {
+                        const { captcha, id : cid } = req.body.captcha || {};
+                        if (!captcha || !cid) {
+                            res.makeError(400, 'Please provide captcha code!', m);
+                            return next('route');
+                        }
+
+                        if (!await verifyCaptcha(cid, captcha)) {
+                            res.makeError(400, 'Captcha code is incorrect!', m);
+                            return next('route');
+                        }
+                    }
+
                     const existPhone = await res.app.models.account.countDocuments({ PhoneNumber: phone });
                     if (existPhone) {
-                        res.makeError(404, 'The phone use used already!', m);
+                        res.makeError(404, 'The phone number was used already!', m);
                         return next('route');
                     }
 
                     // only create with specified fields
                     res.locals.body = {
+                        Saved: true,
                         PhoneNumber: phone,
                         Password: encryptPwd(password, m.config.pwdEncryptMethod || 'md5')
                     }
 
                     if (!m.config.accountRequireAudit) {
                         res.locals.body.Status = AccountAuditStatus.Passed;
+                    } else {
+                        res.locals.body.Status = AccountAuditStatus.Auditing;
                     }
 
                     const defaultPerm = Object.assign({}, m.config.accountDefaultPermissions);
@@ -882,6 +1231,20 @@ module.exports = {
                         res.makeError(400, 'Please provide phone number, sms code and the password!', m);
                         return next('route');
                     }
+                    // check captcha
+                    if(m.config.captcha.recover) {
+                        const { captcha, id : cid } = req.body.captcha || {};
+                        if (!captcha || !cid) {
+                            res.makeError(400, 'Please provide captcha code!', m);
+                            return next('route');
+                        }
+
+                        if (!await verifyCaptcha(cid, captcha)) {
+                            res.makeError(400, 'Captcha code is incorrect!', m);
+                            return next('route');
+                        }
+                    }
+
                     const phone = crypto.encoder.desDecode(req.body.PhoneNumber, m.config.desKey);
                     const password = crypto.encoder.desDecode(req.body.Password, m.config.desKey);
 
@@ -919,9 +1282,7 @@ module.exports = {
                     let filter;
                     if (req.user.Permission !== '*') {
                         const permPathList = getPermissionPathList(req.user.Permission);
-                        filter = { Path: { $in: permPathList }, Enabled: true };
-                    } else {
-                        filter = { Enabled: true };
+                        filter = { Path: { $in: permPathList } };
                     }
 
                     res.addData(await __getServiceList(res, filter));
@@ -970,6 +1331,10 @@ module.exports = {
                     for (let j = 0; j < sList.length; j += 1) {
                         const service = sList[j];
 
+                        if(ds.OnlyFor && ds.OnlyFor.findIndex(dsof => {
+                            return (dsof.startsWith('/') ? dsof : '/dsof').startsWith(service.Path);
+                        }) < 0) continue;
+
                         if (service.Path) {
                             insertDataScopeMW(service.Path, `${service.Path.replace(/\//g, '_')}_${ds.Name}`, ds.Func(ds, service.Scope.find(ss => ss.Name === ds.Name), service.Path));
                         }
@@ -987,10 +1352,12 @@ module.exports = {
                 }
 
                 await m.models.account.create({
+                    Saved: true,
+                    Enabled: true,
+                    Deleted: false,
                     UserName: m.config.defaultAccountName || 'admin',
                     Password: crypto.MD5(m.config.defaultAccountPwd) || 'f6fdffe48c908deb0f4c3bd36c032e72',
                     Permission: perms,
-                    Saved: true,
                     Status: AccountAuditStatus.Passed,
                     Profile: {
                         Name: 'SuperAdmin'
@@ -998,7 +1365,10 @@ module.exports = {
                 });
             }
 
+            // clear all cached permission control (user permissions)
+            m.clearCachedPermission(app);
+
             // TODO: remove service list which are in the white list
         }
     }
-}
+})

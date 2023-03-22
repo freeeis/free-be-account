@@ -24,7 +24,7 @@ router.get('/',
 );
 
 // router.get('/search',
-//     (req, res, next) => {
+//     async (req, res, next) => {
 //         res.locals = res.locals || {};
 
 //         res.locals.filter = {};
@@ -32,10 +32,9 @@ router.get('/',
 //             res.locals.filter.id = req.query.id;
 //         }
 //         else if (req.query.search) {
-//             // TODO: search with regexp not working!!!
-//             // let keyword = new RegExp(req.query.search);
+//             let keyword = RegExp.quote(req.query.search, 'i');
 //             res.locals.filter.$or = [
-//                 { Name: req.query.search },
+//                 { Name: keyword },
 //             ];
 //         } else {
 //             await res.endWithErr(400);
