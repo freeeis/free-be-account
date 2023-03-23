@@ -1,5 +1,7 @@
+const path = require('path');
 const axios = require('axios');
-const { wx } = require('../../../../global');
+
+const { wx } = require(path.resolve('./global'));
 
 const wxAgent = axios.create({
     baseURL: 'https://api.weixin.qq.com',
