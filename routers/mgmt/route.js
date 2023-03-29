@@ -70,16 +70,17 @@ router.get('/', async (req, res, next) => {
         res.locals.data.summary.auditing = await res.app.models['account'].countDocuments({...res.locals.filter, Saved: true, Status: AccountAuditStatus.Auditing });
         res.locals.data.summary.passed = await res.app.models['account'].countDocuments({...res.locals.filter, Saved: true, Status: AccountAuditStatus.Passed });
         res.locals.data.summary.failed = await res.app.models['account'].countDocuments({...res.locals.filter, Saved: true, Status: AccountAuditStatus.Failed });
+    } else {
+        // no audit needed, return data for enabled and disabled
+        res.locals.data.summary = {};
+        res.locals.data.summary.passed = await res.app.models['account'].countDocuments({ Saved: true, Enabled: true });
+        res.locals.data.summary.failed = await res.app.models['account'].countDocuments({ Saved: true, Enabled: false });
     }
     
     return next();
 
 }, router.FindDocuments('account', false, async (req, res) => {
     res.locals.data.Filters = accountFilters;
-
-    res.locals.data.summary = {};
-    res.locals.data.summary.passed = await res.app.models['account'].countDocuments({ Saved: true, Enabled: true });
-    res.locals.data.summary.failed = await res.app.models['account'].countDocuments({ Saved: true, Enabled: false });
 
     if (res.locals.data && res.locals.data.total) {
         for (let i = 0; i < res.locals.data.docs.length; i += 1) {
@@ -293,7 +294,7 @@ router.post('/:id/resetpwd',
 
 router.delete('/', router.DeleteDocument('account'));
 
-router.get(`/search`,
+router.get(`/org/search`,
     async (req, res, next) => {
         res.locals = res.locals || {};
 

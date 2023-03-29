@@ -158,6 +158,11 @@ module.exports = (app) => ({
     config: {
         routeRoot: 'account',
         asRouteService: true,
+
+        dependencies: [
+            'core-modules'
+        ],
+        
         defaultPassword: '12345678',
         subAccountsHaveSameDateScope: true,
         subAccountsHaveSubAccountsPermission: false,
@@ -191,10 +196,10 @@ module.exports = (app) => ({
         permissionControls: [],
         captcha: {
             cache: 5 * 60 * 1000,
-            login: true,
-            register: true,
-            recover: true,
-            ignoreCase: false,
+            login: false,
+            register: false,
+            recover: false,
+            ignoreCase: true,
             options: {},
         },
 
@@ -292,10 +297,6 @@ module.exports = (app) => ({
             platform: '',
             keys: {}
         },
-
-        dependencies: [
-            'core-modules'
-        ]
     },
     data: {
         account: {
@@ -447,6 +448,7 @@ module.exports = (app) => ({
         }
 
         // clear sub account permission for all sub accounts
+        // TODO: could we support sub accounts or a sub account??
         if(!mdl.config.subAccountsHaveSubAccountsPermission && req.user && req.user.Parent && req.user.Permission && req.user.Permission.uc && req.user.Permission.uc.sub){
             delete req.user.Permission.uc.sub;
         }
@@ -814,7 +816,7 @@ module.exports = (app) => ({
                                         ...openidFilter,
                                         Enabled: true,
                                         Deleted: false,
-                                    }, async function (err, user) {
+                                    }).then((user) => {
                                         if (user) {
                                             user.isWx = true;
                                             done(null, user);
@@ -833,17 +835,19 @@ module.exports = (app) => ({
                                                 Deleted: false,
                                                 Permission: app.config.passport.accountDefaultPermissions || {},
                                                 Profile: profile,
-                                            }, async function (err, nuser) {
-                                                if (err) {
-                                                    done(err);
-                                                } else if (nuser) {
+                                            }).then((nuser) => {
+                                                if (nuser) {
                                                     nuser.isWx = true;
                                                     done(null, nuser);
                                                 } else {
                                                     done(null, false);
                                                 }
+                                            }).catch((err) => {
+                                                done(err);
                                             });
                                         }
+                                    }).catch((err) => {
+                                        done(err);
                                     }
                                 );
                             }
@@ -857,11 +861,28 @@ module.exports = (app) => ({
                                 // Password: password,
                                 Enabled: true,
                                 Deleted: false,
-                            }, async function (err, user) {
-                                if (err) { return done(err); }
-                                if (!user) { return done(null, false); }
-                                if (!verifyPassword(password, user.Password, m.config.pwdEncryptMethod || 'md5') && (await app.cache.get(username)) !== password) { return done(null, false); }
-                                return done(null, user);
+                            }).then((user) => {
+                                if (!user) { 
+                                    return done(null, false); 
+                                }
+
+                                const pwdVerified = verifyPassword(password, user.Password, m.config.pwdEncryptMethod || 'md5');
+
+                                return Promise.resolve(app.cache.get(username)).then((cachePwd) => {
+                                    if (!pwdVerified && cachePwd !== password) {
+                                        return done(null, false); 
+                                    } else {
+                                        return done(null, user);
+                                    }
+                                }).catch((err) => {
+                                    if (pwdVerified) {
+                                        return done(null, false); 
+                                    }
+
+                                    return done(err);
+                                });
+                            }).catch((err) => {
+                                done(err);
                             }
                         );
                     }
