@@ -29,13 +29,13 @@ router.get('/',
 router.post('/', 
     (req, res, next) => {
         if(req.body.Permission) {
-            if (!res.app.modules['passport'].utils.clearPermission(req.body.Permission)) {
+            if (!router.mdl.utils.clearPermission(req.body.Permission)) {
                 req.body.Permission = {};
             }
 
             // permission changed, clear all cached account permission
             // TODO: should be optimized??
-            res.app.modules['passport'].clearCachedPermission(res.app);
+            router.mdl.clearCachedPermission(res.app);
         }
 
         // when create or update plabel, provided permission should NOT exceed the permission of the current user
@@ -55,13 +55,13 @@ router.post('/',
 router.put('/', 
     (req, res, next) => {
         if(req.body.Permission) {
-            if (!res.app.modules['passport'].utils.clearPermission(req.body.Permission)) {
+            if (!router.mdl.utils.clearPermission(req.body.Permission)) {
                 req.body.Permission = {};
             }
 
             // permission changed, clear all cached account permission
             // TODO: should be optimized??
-            res.app.modules['passport'].clearCachedPermission(res.app);
+            router.mdl.clearCachedPermission(res.app);
         }
 
         // when create or update plabel, provided permission should NOT exceed the permission of the current user
