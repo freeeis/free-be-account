@@ -294,7 +294,7 @@ router.post('/:id/resetpwd',
 
 router.delete('/', router.DeleteDocument('account'));
 
-router.get(`/org/search`,
+router.get(`/search`,
     async (req, res, next) => {
         res.locals = res.locals || {};
 
