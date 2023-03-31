@@ -1371,7 +1371,7 @@ module.exports = (app) => ({
                 // if (!clearPermission(perms)) {
                 //     perms = {}
                 // }
-                const perm = '*';
+                const perms = '*';
 
                 await m.models.account.create({
                     Saved: true,
