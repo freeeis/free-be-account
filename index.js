@@ -541,7 +541,7 @@ module.exports = (app) => ({
      */
     clearCachedPermission: (app, p = '*') => {
         // clear all cached permission control (user permissions)
-        app.cache.keys(`perm_ctrl_${p}`).then(ks => {
+        Promise.resolve(app.cache.keys(`perm_ctrl_${p}`)).then(ks => {
             ks.forEach(k => app.cache.del(k))
         });
     },
