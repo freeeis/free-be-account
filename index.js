@@ -1367,10 +1367,11 @@ module.exports = (app) => ({
         onRoutersReady: async (app, m) => {
             // create default user if it's an empty db
             if (await m.models['account'].countDocuments({}) <= 0) {
-                let perms = app.ctx.serviceList()
-                if (!clearPermission(perms)) {
-                    perms = {}
-                }
+                // let perms = app.ctx.serviceList()
+                // if (!clearPermission(perms)) {
+                //     perms = {}
+                // }
+                const perm = '*';
 
                 await m.models.account.create({
                     Saved: true,
