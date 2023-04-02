@@ -79,11 +79,11 @@ router.post('/submit',
             res.locals.body.Profile = {...user.Profile, ...req.body.Profile};
         }
 
-        res.locals.body.Status = res.app.modules.passport.AccountAuditStatus.Auditing;
+        res.locals.body.Status = res.app.modules.account.AccountAuditStatus.Auditing;
 
         // set to default permission 
-        const p = res.app.modules.passport.config.accountDefaultPermissions;
-        res.app.modules.passport.utils.clearPermission(p);
+        const p = res.app.modules.account.config.accountDefaultPermissions;
+        res.app.modules.account.utils.clearPermission(p);
         res.locals.body.Permission = p;
 
         res.locals.filters = { id: req.user.id };

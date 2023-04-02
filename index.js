@@ -833,7 +833,7 @@ module.exports = (app) => ({
                                             app.models['account'].create({
                                                 Enabled: true,
                                                 Deleted: false,
-                                                Permission: app.config.passport.accountDefaultPermissions || {},
+                                                Permission: app.config.account.accountDefaultPermissions || {},
                                                 Profile: profile,
                                             }).then((nuser) => {
                                                 if (nuser) {

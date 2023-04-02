@@ -79,7 +79,6 @@ router.post('/',
         // also same Org (but should check whether we have Org module??)
         if (req.user.Org) req.body.Org = req.user.Org;
 
-        // TODO: should not set status here as we don't have this field yet (which was added in passport)
         req.body.Status = '1';
 
         // TODO: check permission, should not be bigger than the main account

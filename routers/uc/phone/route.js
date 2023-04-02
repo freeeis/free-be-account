@@ -24,7 +24,7 @@ router.put('/',
 
         // update phone number
         res.locals.body = {};
-        res.locals.body.PhoneNumber = res.app.modules.passport.utils.crypto.encoder.desDecode(req.body.phone, res.app.modules.passport.config.desKey);
+        res.locals.body.PhoneNumber = res.app.modules.account.utils.crypto.encoder.desDecode(req.body.phone, res.app.modules.account.config.desKey);
 
         const oResult = await res.Module('sms').verify(ophone, req.body.ocode);
         if (!oResult) {
