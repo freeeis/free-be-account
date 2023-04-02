@@ -16,7 +16,7 @@ router.put('/',
             return next('route');
         }
 
-        const result = await res.Module('sms').verify(phone, req.body.code);
+        const result = await router.mdl.sms.verify(phone, req.body.code);
         // app.logger.debug(cache.exportJson());
 
         if (!result) {

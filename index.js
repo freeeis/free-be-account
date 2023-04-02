@@ -152,6 +152,38 @@ const verify_api_permission = async (app, mdl, user, api_path) => {
     return true; // TODO: secure enough??
 }
 
+
+async function clear_cache_token_by_user_id (app, id) {
+    if (!id) return;
+
+    const cacheKeys = await app.cache.keys();
+    if (cacheKeys && cacheKeys.length) {
+        for (let i = 0; i < cacheKeys.length; i += 1) {
+            const k = cacheKeys[i];
+
+            let value = await app.cache.get(k);
+            if (value && value.userId && value.userId === id)
+                await app.cache.del(k);
+        }
+    }
+}
+
+async function generate_new_access_token_pwd (app, userId, oldToken, keepToken = '', isWx = false) {
+    let uuid = keepToken || uuidv1();
+
+    // remove the old one from cache
+    app.cache.del(oldToken);
+    // cache.del(oldToken);
+    await clear_cache_token_by_user_id(app, userId);
+
+    // add the new one to the cache
+
+    app.cache.put(uuid, { userId: userId, type: isWx ? 'wx' : 'pwd' }, app.config['cacheTimeout']);
+    // cache.put(uuid, { userId: userId, type: 'pwd' }, app.config['cacheTimeout']);
+
+    return uuid;
+}
+
 module.exports = (app) => ({
     sms: sms(app),
     AccountAuditStatus,
@@ -545,6 +577,8 @@ module.exports = (app) => ({
             ks.forEach(k => app.cache.del(k))
         });
     },
+    clear_cache_token_by_user_id,
+    generate_new_access_token_pwd,
     hooks: {
         onBegin: (app) => {
             app.use(passport.initialize());
@@ -985,37 +1019,6 @@ module.exports = (app) => ({
                 return next();
             });
 
-            async function clear_cache_token_by_user_id (id) {
-                if (!id) return;
-
-                const cacheKeys = await app.cache.keys();
-                if (cacheKeys && cacheKeys.length) {
-                    for (let i = 0; i < cacheKeys.length; i += 1) {
-                        const k = cacheKeys[i];
-
-                        let value = await app.cache.get(k);
-                        if (value && value.userId && value.userId === id)
-                            await app.cache.del(k);
-                    }
-                }
-            }
-
-            async function generate_new_access_token_pwd (userId, oldToken, keepToken = '', isWx = false) {
-                let uuid = keepToken || uuidv1();
-
-                // remove the old one from cache
-                app.cache.del(oldToken);
-                // cache.del(oldToken);
-                await clear_cache_token_by_user_id(userId);
-
-                // add the new one to the cache
-
-                app.cache.put(uuid, { userId: userId, type: isWx ? 'wx' : 'pwd' }, app.config['cacheTimeout']);
-                // cache.put(uuid, { userId: userId, type: 'pwd' }, app.config['cacheTimeout']);
-
-                return uuid;
-            }
-
             // login with the specified strategy
             app.post(`${app.config['baseUrl'] || ''}/login`,
                 passport.authenticate(m.config['strategy'] || 'local', { session: false }),
@@ -1044,10 +1047,10 @@ module.exports = (app) => ({
                         (req.user && req.user.PhoneNumber && m.config['keepTokenAccounts'].indexOf(req.user.PhoneNumber) >= 0)) {
                         // keep token
                         const kt = await app.cache.get(`_keep_token_${req.user.id}`);
-                        token = await generate_new_access_token_pwd(req.user.id, access_token, kt, req.user.isWx);
+                        token = await generate_new_access_token_pwd(app, req.user.id, access_token, kt, req.user.isWx);
                         app.cache.set(`_keep_token_${req.user.id}`, token);
                     } else {
-                        token = await generate_new_access_token_pwd(req.user.id, access_token, null, req.user.isWx);
+                        token = await generate_new_access_token_pwd(app, req.user.id, access_token, null, req.user.isWx);
                     }
 
                     res.cookie('token', token, { maxAge: app.config['cookieTimeout'] });
@@ -1132,7 +1135,7 @@ module.exports = (app) => ({
                         return next('route');
                     }
 
-                    const result = await res.Module('sms').sendRandom(phone, undefined, true, req.body.smsTemp || 'register');
+                    const result = await m.sms.sendRandom(phone, undefined, true, req.body.smsTemp || 'register');
 
                     if (!result) {
                         res.makeError(500, 'Failed to send sms!', m);
@@ -1147,7 +1150,6 @@ module.exports = (app) => ({
                 return next();
             })
 
-
             // verfiy the sms code
             app.post(`${(app.config['baseUrl'] || '')}/register/verify`, async (req, res, next) => {
                 if (!req.body.PhoneNumber || !req.body.code) {
@@ -1155,7 +1157,7 @@ module.exports = (app) => ({
                     return next('route');
                 }
                 const phone = crypto.encoder.desDecode(req.body.PhoneNumber, m.config.desKey);
-                const result = await res.Module('sms').verify(phone, req.body.code);
+                const result = await m.sms.verify(phone, req.body.code);
                 // app.logger.debug(cache.exportJson());
 
                 if (!result) {
@@ -1166,7 +1168,6 @@ module.exports = (app) => ({
                 res.addData({});
                 return next();
             })
-
 
             // verify phone number (duplication) for register
             app.post(`${(app.config['baseUrl'] || '')}/register/verify/phone`, async (req, res, next) => {
@@ -1196,7 +1197,7 @@ module.exports = (app) => ({
                         return next('route');
                     }
 
-                    const result = await res.Module('sms').verify(phone, req.body.code);
+                    const result = await m.sms.verify(phone, req.body.code);
 
                     if (!result) {
                         res.makeError(403, 'Code verification failed!', m);
@@ -1269,7 +1270,7 @@ module.exports = (app) => ({
                     const phone = crypto.encoder.desDecode(req.body.PhoneNumber, m.config.desKey);
                     const password = crypto.encoder.desDecode(req.body.Password, m.config.desKey);
 
-                    const result = await res.Module('sms').verify(phone, req.body.code);
+                    const result = await m.sms.verify(phone, req.body.code);
 
                     if (!result) {
                         res.makeError(403, 'Code verification failed!', m);

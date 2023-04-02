@@ -26,7 +26,7 @@ router.put('/',
         res.locals.body = {};
         res.locals.body.PhoneNumber = res.app.modules.account.utils.crypto.encoder.desDecode(req.body.phone, res.app.modules.account.config.desKey);
 
-        const oResult = await res.Module('sms').verify(ophone, req.body.ocode);
+        const oResult = await router.mdl.sms.verify(ophone, req.body.ocode);
         if (!oResult) {
             res.makeError(400, 'Verification code for the old phone is incorrect!', router.mdl);
             await res.app.cache.del(ophone);
@@ -34,7 +34,7 @@ router.put('/',
             return next('route');
         }
 
-        const result = await res.Module('account').sms.verify(res.locals.body.PhoneNumber, req.body.code);
+        const result = await router.mdl.sms.verify(res.locals.body.PhoneNumber, req.body.code);
         if (!result) {
             res.makeError(405, 'Verification code for the new phone is incorrect!', router.mdl);
             await res.app.cache.del(ophone);
