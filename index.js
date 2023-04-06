@@ -1144,7 +1144,7 @@ module.exports = (app) => ({
                         return next('route');
                     }
                 } catch (ex) {
-                    res.makeError(500, ex.message || 'Failed to send sms!', m);
+                    res.makeError(502, ex.message || 'Failed to send sms!', m);
                     return next('route');
                 }
 
