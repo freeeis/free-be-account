@@ -1121,18 +1121,20 @@ module.exports = (app) => ({
                     const phone = crypto.encoder.desDecode(req.body.PhoneNumber, m.config.desKey);
 
                     // check user existance if necessary
-                    const existsCount = await res.app.models.account.countDocuments({$or: [
-                        { PhoneNumber: phone },
-                        { 'Profile.Email': phone },
-                    ]});
-
-                    if (req.body.exists && existsCount <= 0) {
-                        res.makeError(409, 'User not exists!', m);
-                        return next('route');
-                    }
-                    if (!req.body.exists && existsCount > 0) {
-                        res.makeError(410, 'User aleady exists!', m);
-                        return next('route');
+                    if (req.body.exists !== 'all') {
+                        const existsCount = await res.app.models.account.countDocuments({$or: [
+                            { PhoneNumber: phone },
+                            { 'Profile.Email': phone },
+                        ]});
+    
+                        if (req.body.exists && existsCount <= 0) {
+                            res.makeError(409, 'User not exists!', m);
+                            return next('route');
+                        }
+                        if (!req.body.exists && existsCount > 0) {
+                            res.makeError(410, 'User aleady exists!', m);
+                            return next('route');
+                        }
                     }
 
                     const result = await m.sms.sendRandom(phone, undefined, true, req.body.smsTemp || 'register');

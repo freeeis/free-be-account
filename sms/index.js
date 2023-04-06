@@ -5,8 +5,8 @@ const nodemailer = require('nodemailer');
 
 let global;
 
-if (fs.existsSync(path.resolve(__dirname, '../../global.js'))) {
-    global = require('../../global');
+if (fs.existsSync(path.resolve(__dirname, '../../../global.js'))) {
+    global = require('../../../global');
 }
 
 let MAIL_TRANS = undefined;
