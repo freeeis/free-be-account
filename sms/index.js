@@ -132,10 +132,12 @@ module.exports = (app) => ({
         const keys = (global && global.sms && global.sms[t]) || app.modules.account.config.sms.keys[t] || app.modules.account.config.sms.keys;
         
         if (keys.platform) {
-            // if the cached code still there, we should not re-send!
-            if (await app.cache.get(p)) {
+            // should not send too frequent!
+            const lastSentTime = await app.cache.get(`${p}_lastSentTime`);
+            if (lastSentTime && (Date.now() - lastSentTime) < (keys.resentGap || (60 * 1000))) {
                 throw new Error('Cannot send too frequently!');
             }
+
             if (_sms_lib[keys.platform]) {
                 let sent = true;
                 const v = keys.fixedCode || value;
@@ -150,6 +152,7 @@ module.exports = (app) => ({
                     if (c) {
                         const cTime = keys.cacheTime || (5 * 60 * 1000)
                         await app.cache.put(p, v, cTime);
+                        await app.cache.put(`${p}_lastSentTime`, Date.now(), cTime);
                     }
                     return true;
                 } else {
