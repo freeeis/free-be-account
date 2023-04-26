@@ -1070,7 +1070,7 @@ module.exports = (app) => ({
                     let access_token = req.cookies.token || req.header('Authorization');
 
                     // call logout of the passport
-                    req.logout();
+                    req.logout(() => {});
 
                     // clear the cached token
                     res.clearCookie('token');
