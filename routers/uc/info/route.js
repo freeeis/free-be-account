@@ -29,6 +29,8 @@ router.get('/', (req, res, next) => {
         Status: user.Status,
 
         StepsDefinition,
+
+        ar: router.mdl.config.accountRequireAudit,
     });
 
     return next();
@@ -61,7 +63,15 @@ router.post('/edit', async (req, res, next) => {
     res.app.modules.account.utils.clearPermission(p);
 
     // TODO: should not use mongoose directly
-    await res.app.models['account'].update({ id: req.user.id }, { $unset: { Status: 0 }, $set: { Permission: p } });
+    const setObj = {
+        $set: { Permission: p }
+    };
+
+    if (router.mdl.config.accountRequireAudit) {
+        Object.assign(setObj, { $unset: { Status: 0 } });
+    }
+
+    await res.app.models['account'].update({ id: req.user.id }, setObj);
 
     res.addData({});
 
@@ -79,14 +89,16 @@ router.post('/submit',
             res.locals.body.Profile = {...user.Profile, ...req.body.Profile};
         }
 
-        res.locals.body.Status = res.app.modules.account.AccountAuditStatus.Auditing;
+        if (router.mdl.config.accountRequireAudit) {
+            res.locals.body.Status = router.mdl.AccountAuditStatus.Auditing;
+        }
 
         // set to default permission 
-        const p = res.app.modules.account.config.accountDefaultPermissions;
+        const p = router.mdl.config.accountDefaultPermissions;
         res.app.modules.account.utils.clearPermission(p);
         res.locals.body.Permission = p;
 
-        res.locals.filters = { id: req.user.id };
+        res.locals.filter = { id: req.user.id };
         res.locals.fields = [
             'Profile',
             'Status',

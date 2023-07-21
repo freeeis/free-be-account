@@ -63,7 +63,7 @@ router.put('/',
             res.locals.body.UserName = res.locals.body.PhoneNumber;
         }
 
-        res.locals.filters = { id: req.user.id };
+        res.locals.filter = { id: req.user.id };
         res.locals.fields = [
             'PhoneNumber',
             'Password',
