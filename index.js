@@ -51,12 +51,13 @@ const __getServiceList = async (res, filter = { Enabled: true }) => {
                     filter ? {} : {
                         Scope: filter ? undefined: doc.Scope.map(sc => {
                             const dso = res.app.getContainerContent('DataScope').find(ds => ds.Name === sc.Name);
-                            return {
-                                Label: dso ? dso.Label : '',
+                            return dso ? {
+                                Label: dso.Label || '',
                                 Field: `${sc.Name}`,
-                                Type: 'Select',
-                                Options: dso ? dso.Options : []
-                            }
+                                Type: dso.Component || 'Select',
+                                Options: dso.Options || [],
+                                Multiple: dso.Multiple || false,
+                            } : {};
                         })
                     })
                 }
@@ -366,6 +367,7 @@ module.exports = (app) => ({
             Description: { type: 'String' },
             Index: { type: 'Number', required: true },
             IsVirtual: { type: 'Boolean', default: false },
+            Profile: { type: 'Object', default: {} },
 
             Permission: { type: 'Object', default: {} },
         },
@@ -895,9 +897,43 @@ module.exports = (app) => ({
                                 // Password: password,
                                 Enabled: true,
                                 Deleted: false,
-                            }).then((user) => {
+                            }).then(async (user) => {
                                 if (!user) { 
-                                    return done(null, false); 
+                                    // auto create new user
+                                    if (m.config.autoCreateNewUser) {
+                                        const valid_phone = (d) => {
+                                            return /^(0|86|17951)?(13[0-9]|14[0-9]|15[0-9]|16[0-9]|17[0-9]|18[0-9]|19[0-9])[0-9]{8}$/.test(d);
+                                        };
+                                        const valid_email = (d) => {
+                                            // eslint-disable-next-line no-useless-escape
+                                            return /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(d);
+                                        }
+
+                                        const userPhoneEmail = {};
+                                        if (valid_phone(username)) {
+                                            userPhoneEmail.PhoneNumber = username;
+                                        } else if (valid_email(username)) {
+                                            userPhoneEmail['Profile'] = {
+                                                Email: username
+                                            };
+                                        }
+                                        
+                                        const permission = Object.assign({}, m.config.accountDefaultPermissions);
+                                        clearPermission(permission);
+                                        const newU = await app.models['account'].create({
+                                            Saved: true,
+                                            UserName: username,
+                                            Password: '',
+                                            Status: m.config.accountRequireAudit ? AccountAuditStatus.Auditing : AccountAuditStatus.Passed,
+                                            Permission: permission,
+                                            
+                                            // set phone number or email
+                                            ...userPhoneEmail,
+                                        });
+                                        return done(null, newU);
+                                    } else {
+                                        return done(null, false); 
+                                    }
                                 }
 
                                 const pwdVerified = verifyPassword(password, user.Password, m.config.pwdEncryptMethod || 'md5');
@@ -985,12 +1021,19 @@ module.exports = (app) => ({
                         await res.endWithErr(400, 401);
                     }
                     else {
+                        res.clearCookie('token');
                         await res.endWithErr(401);
                     }
 
                     return;
                 }
 
+                // update token in cookies
+                const token = req.cookies.token;
+                if (token) {
+                    res.cookie('token', token, { maxAge: app.config['cookieTimeout'] });
+                }
+                
                 return next();
             });
 
@@ -1127,17 +1170,17 @@ module.exports = (app) => ({
                             { 'Profile.Email': phone },
                         ]});
     
-                        if (req.body.exists && existsCount <= 0) {
+                        if (req.body.exists === true && existsCount <= 0) {
                             res.makeError(409, 'User not exists!', m);
                             return next('route');
                         }
-                        if (!req.body.exists && existsCount > 0) {
+                        if (req.body.exists === false && existsCount > 0) {
                             res.makeError(410, 'User aleady exists!', m);
                             return next('route');
                         }
                     }
 
-                    const result = await m.sms.sendRandom(phone, undefined, true, req.body.smsTemp || 'register');
+                    const result = await m.sms.sendRandom(phone, m.config.smsFormat || undefined, true, req.body.smsTemp || 'register');
 
                     if (!result) {
                         res.makeError(500, 'Failed to send sms!', m);
@@ -1280,8 +1323,13 @@ module.exports = (app) => ({
                     }
 
                     // only create with specified fields
+                    if (m.config.recoverNoSamePwd && verifyPassword(password, req.user.Password, m.config.pwdEncryptMethod || 'md5')) {
+                        res.makeError(406, 'New password cannot be the same as the old one!', m);
+                        return next('route');
+                    }
+
                     res.locals.body = {
-                        Password: encryptPwd(password, m.config.pwdEncryptMethod || 'md5')
+                        Password: encryptPwd(password, m.config.pwdEncryptMethod || 'md5'),
                     }
 
                     res.locals.filter = {

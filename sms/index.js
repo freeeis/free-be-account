@@ -129,7 +129,13 @@ module.exports = (app) => ({
             t = `${t}_mail`;
         }
 
-        const keys = (global && global.sms && global.sms[t]) || app.modules.account.config.sms.keys[t] || app.modules.account.config.sms.keys;
+        let keys = app.modules.account.config.sms.keys[t] || app.modules.account.config.sms.keys;
+
+        if (!keys.platform) {
+            keys = (global && global.sms && global.sms[t]);
+        }
+        
+        // const keys = (global && global.sms && global.sms[t]) || app.modules.account.config.sms.keys[t] || app.modules.account.config.sms.keys;
         
         if (keys.platform) {
             // should not send too frequent!

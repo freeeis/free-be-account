@@ -60,7 +60,7 @@ function clearPermission(perm) {
     return clearP(perm);
 }
 
-function verifyPassword(pwd, storedPwd, method = 'md5') {
+function verifyPassword(pwd, storedPwd = '', method = 'md5') {
     let verified = false;
     let methods = [];
 
@@ -77,7 +77,7 @@ function verifyPassword(pwd, storedPwd, method = 'md5') {
                 verified = verified || (crypto.MD5(pwd) === storedPwd);
                 break;
             case 'sha1':
-                verified = verified || (crypto.sha1(pwd, storedPwd.substr(0, EncryptOptions.saltLength), EncryptOptions.sha1Iteration).toString() === storedPwd.substr(EncryptOptions.saltLength));
+                verified = verified || (crypto.sha1(pwd, storedPwd.substring(0, EncryptOptions.saltLength), EncryptOptions.sha1Iteration).toString() === storedPwd.substr(EncryptOptions.saltLength));
                 break;
             case 'bcrypt':
                 verified = verified || crypto.bcryptVerify(pwd, storedPwd);
@@ -131,6 +131,12 @@ async function saveServiceList (app, clean=false) {
 
         for (let i = 0; i < Object.keys(perm).length; i += 1) {
             const p = Object.keys(perm)[i];
+
+            // in case the developer didn't provide title and description information
+            perm[p] = perm[p] || {
+                title: p,
+                description: p,
+            };
 
             // TODO: notify user if they are creating permission with these names
             if (['title', 'description', 'scope', 'label'].indexOf(p.toLowerCase()) >= 0) continue;

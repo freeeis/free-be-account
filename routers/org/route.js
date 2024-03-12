@@ -9,7 +9,8 @@ router.get('/',
             'Name',
             'Index',
             'IsVirtual',
-            'Permission'
+            'Permission',
+            'Profile',
         ];
         res.locals.filter = {
             Parent: req.query.Parent || {
