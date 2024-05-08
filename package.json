@@ -13,6 +13,7 @@
     "bcrypt": "^5.1.1",
     "crypto-js": "^4.2.0",
     "js-md5": "^0.7.3",
+    "minimatch": "^9.0.4",
     "nodemailer": "^6.9.13",
     "passport": "^0.6.0",
     "passport-local": "^1.0.0",
