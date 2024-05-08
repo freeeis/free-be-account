@@ -1012,16 +1012,16 @@ module.exports = (app) => ({
             // permission control
             app.use(async (req, res, next) => {
                 // permission control
+                const whiteList = ((m.config && m.config['whiteList']) || []).concat([`${app.config['baseUrl'] || ''}/login`]);
+                for (let i = 0; i < whiteList.length; i += 1) {
+                    const wl = whiteList[i];
+
+                    if (typeof wl === 'string' && wl.toLowerCase() === req.originalUrl.toLowerCase()) return next();
+
+                    if (typeof wl === 'object' && new RegExp(wl).test(req.originalUrl)) return next();
+                }
+                
                 if (!await m.hasPermission(req, m)) {
-                    const whiteList = ((m.config && m.config['whiteList']) || []).concat([`${app.config['baseUrl'] || ''}/login`]);
-                    for (let i = 0; i < whiteList.length; i += 1) {
-                        const wl = whiteList[i];
-
-                        if (typeof wl === 'string' && wl.toLowerCase() === req.originalUrl.toLowerCase()) return next();
-
-                        if (typeof wl === 'object' && new RegExp(wl).test(req.originalUrl)) return next();
-                    }
-
                     if (req.user && req.user.id) {
                         await res.endWithErr(400, 401);
                     }
@@ -1038,14 +1038,10 @@ module.exports = (app) => ({
                 if (token) {
                     res.cookie('token', token, { maxAge: app.config['cookieTimeout'] });
                 }
-                
-                return next();
-            });
 
-            // check for force reset pwd
-            app.use(async (req, res, next) => {
+                // check for force reset pwd
                 const resetP = m.config && m.config['forceResetPwd'];
-                
+
                 if(resetP && req.user && req.user.id) {
                     const updateAt = req.user.PwdUpdatedAt || req.user.CreatedDate || req.user.LastUpdateDate;
                     const pastP = new Date() - updateAt;
