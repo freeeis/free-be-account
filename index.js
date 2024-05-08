@@ -205,6 +205,10 @@ module.exports = (app) => ({
         accountDefaultPassword: '12345678',
         accountDefaultPasswordRandom: false,
         accountDefaultPasswordRandomLength: 6,
+
+        autoCreateNewUser: false,
+        recoverNoSamePwd: false,
+
         // accountDefaultPermissions: [
         //     // could from system config
         //     // {
@@ -227,6 +231,7 @@ module.exports = (app) => ({
 
         dataScopes: [],
         permissionControls: [],
+        smsFormat: '6n',
         captcha: {
             cache: 5 * 60 * 1000,
             login: false,
@@ -1052,9 +1057,6 @@ module.exports = (app) => ({
                             return next();
                         }
                     }
-                    else {
-                        await res.endWithErr(401);
-                    }
 
                     return;
                 }
@@ -1323,18 +1325,31 @@ module.exports = (app) => ({
                     }
 
                     // only create with specified fields
-                    if (m.config.recoverNoSamePwd && verifyPassword(password, req.user.Password, m.config.pwdEncryptMethod || 'md5')) {
-                        res.makeError(406, 'New password cannot be the same as the old one!', m);
-                        return next('route');
+                    if (m.config.recoverNoSamePwd) {
+                        let oldPwd = req.user && req.user.Password;
+                        if (!oldPwd) {
+                            const theUser = await res.app.models.account.findOne({$or: [
+                                { PhoneNumber: phone },
+                                { 'Profile.Email': phone },
+                            ]});
+    
+                            oldPwd = theUser && theUser.Password;
+                        }
+
+                        if (oldPwd && verifyPassword(password, oldPwd, m.config.pwdEncryptMethod || 'md5')) {
+                            res.makeError(406, 'New password cannot be the same as the old one!', m);
+                            return next('route');
+                        }
                     }
 
                     res.locals.body = {
                         Password: encryptPwd(password, m.config.pwdEncryptMethod || 'md5'),
                     }
 
-                    res.locals.filter = {
-                        PhoneNumber: phone
-                    }
+                    res.locals.filter = {$or: [
+                        { PhoneNumber: phone },
+                        { 'Profile.Email': phone },
+                    ]}
 
                     return next();
                 },
