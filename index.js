@@ -1045,7 +1045,7 @@ module.exports = (app) => ({
             // check for force reset pwd
             app.use(async (req, res, next) => {
                 const resetP = m.config && m.config['forceResetPwd'];
-
+                
                 if(resetP) {
                     if (req.user && req.user.id) {
                         const updateAt = req.user.PwdUpdatedAt || req.user.CreatedDate || req.user.LastUpdateDate;
@@ -1053,12 +1053,9 @@ module.exports = (app) => ({
 
                         if(pastP > (resetP * 24 * 3600 * 1000)) {
                             await res.endWithErr(403, 'RSTPWD');
-                        } else {
-                            return next();
+                            return next('route');
                         }
                     }
-
-                    return;
                 }
 
                 return next();
