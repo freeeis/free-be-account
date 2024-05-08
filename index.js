@@ -1046,15 +1046,13 @@ module.exports = (app) => ({
             app.use(async (req, res, next) => {
                 const resetP = m.config && m.config['forceResetPwd'];
                 
-                if(resetP) {
-                    if (req.user && req.user.id) {
-                        const updateAt = req.user.PwdUpdatedAt || req.user.CreatedDate || req.user.LastUpdateDate;
-                        const pastP = new Date() - updateAt;
+                if(resetP && req.user && req.user.id) {
+                    const updateAt = req.user.PwdUpdatedAt || req.user.CreatedDate || req.user.LastUpdateDate;
+                    const pastP = new Date() - updateAt;
 
-                        if(pastP > (resetP * 24 * 3600 * 1000)) {
-                            await res.endWithErr(403, 'RSTPWD');
-                            return next('route');
-                        }
+                    if(pastP > (resetP * 24 * 3600 * 1000)) {
+                        await res.makeError(403, 'RSTPWD');
+                        return next('route');
                     }
                 }
 
