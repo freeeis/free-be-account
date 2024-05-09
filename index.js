@@ -1012,13 +1012,25 @@ module.exports = (app) => ({
             // permission control
             app.use(async (req, res, next) => {
                 // permission control
+                let inWhiteList = false;
                 const whiteList = ((m.config && m.config['whiteList']) || []).concat([`${app.config['baseUrl'] || ''}/login`]);
                 for (let i = 0; i < whiteList.length; i += 1) {
                     const wl = whiteList[i];
 
-                    if (typeof wl === 'string' && wl.toLowerCase() === req.originalUrl.toLowerCase()) return next();
+                    if (typeof wl === 'string' && wl.toLowerCase() === req.originalUrl.toLowerCase()) {
+                        inWhiteList = true;
+                        break;
+                    }
 
-                    if (typeof wl === 'object' && new RegExp(wl).test(req.originalUrl)) return next();
+                    if (typeof wl === 'object' && new RegExp(wl).test(req.originalUrl)) {
+                        inWhiteList = true;
+                        break;
+                    }
+                }
+
+                if (inWhiteList) {
+                    await m.hasPermission(req, m)
+                    return next();
                 }
                 
                 if (!await m.hasPermission(req, m)) {
