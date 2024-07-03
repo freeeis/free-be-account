@@ -4,26 +4,26 @@ const router = express.Router();
 const { AccountAuditStatus } = require('../../enum');
 const { clearPermission, encryptPwd, crypto } = require('../../utils');
 
-// TODO: i18n translate
 const accountFilters = [
+    {
+        Name: 'id',
+        Type: 'String',
+        Info: {
+            Separate: true,
+        },
+    },
     {
         Name: 'LastUpdateDate',
         Type: 'DateRange',
-        Label: '更新日期',
-        Placeholder: '请选择',
     },
     {
         Name: 'Enabled',
         Type: 'Select',
-        Label: '激活状态',
-        Placeholder: '请选择',
         Options: [
             {
-                Label: '已激活',
                 Value: true,
             },
             {
-                Label: '未激活',
                 Value: false,
             },
         ],
@@ -31,22 +31,18 @@ const accountFilters = [
     {
         Name: 'Profile.Name',
         Type: 'String',
-        Label: '姓名',
     },
     {
         Name: 'Profile.Title',
         Type: 'String',
-        Label: '职务',
     },
     {
         Name: 'PhoneNumber',
         Type: 'String',
-        Label: '手机号',
     },
     {
         Name: 'UserName',
         Type: 'String',
-        Label: '用户名',
     },
 ];
 

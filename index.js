@@ -1268,16 +1268,52 @@ module.exports = (app) => ({
                         }
                     }
 
-                    const existPhone = await res.app.models.account.countDocuments({ PhoneNumber: phone });
-                    if (existPhone) {
-                        res.makeError(404, 'The phone number was used already!', m);
-                        return next('route');
+                    const valid_phone = (d) => {
+                        return /^(0|86|17951)?(13[0-9]|14[0-9]|15[0-9]|16[0-9]|17[0-9]|18[0-9]|19[0-9])[0-9]{8}$/.test(d);
+                    };
+                    const valid_email = (d) => {
+                        // eslint-disable-next-line no-useless-escape
+                        return /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(d);
+                    }
+
+                    const userPhoneEmail = {};
+                    let isPhone = false;
+                    let isEmail = false;
+
+                    if (valid_phone(phone)) {
+                        userPhoneEmail.PhoneNumber = phone;
+                        isPhone = true;
+                    } else if (valid_email(phone)) {
+                        isEmail = true;
+                        userPhoneEmail.UserName = phone;
+                        userPhoneEmail['Profile'] = {
+                            Email: phone
+                        };
+                    } else {
+                        userPhoneEmail.UserName = phone;
+                    }
+
+                    if (isPhone) {
+                        const existPhone = await res.app.models.account.countDocuments({ PhoneNumber: phone });
+                        if (existPhone) {
+                            res.makeError(404, 'The phone number was used already!', m);
+                            return next('route');
+                        }
+                    }
+
+                    if (isEmail) {
+                        const existPhone = await res.app.models.account.countDocuments({ 'Profile.Email': phone });
+                        if (existPhone) {
+                            res.makeError(405, 'The email address was used already!', m);
+                            return next('route');
+                        }
                     }
 
                     // only create with specified fields
                     res.locals.body = {
                         Saved: true,
-                        PhoneNumber: phone,
+                        // PhoneNumber: phone,
+                        ...userPhoneEmail,
                         Password: encryptPwd(password, m.config.pwdEncryptMethod || 'md5')
                     }
 
