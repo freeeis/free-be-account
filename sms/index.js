@@ -9,7 +9,7 @@ if (fs.existsSync(path.resolve(__dirname, '../../../global.js'))) {
     global = require('../../../global');
 }
 
-let MAIL_TRANS = undefined;
+let MAIL_TRANS = {};
 
 function _generateMSG (f = '4n') {
     if (typeof f !== 'string' || f.length < 2) {
@@ -95,7 +95,7 @@ const _sms_lib = {
         send: async function(k, p, v) {
             if(!k || !k.host || !k.secret || !k.mail || !k.from || !k.title) throw new Error('MMail configuration incorrect!');
             
-            MAIL_TRANS = MAIL_TRANS || nodemailer.createTransport({ 
+            MAIL_TRANS[k.mail] = MAIL_TRANS[k.mail] || nodemailer.createTransport({ 
                 host: k.host, 
                 secureConnection: true,
                 port: 465,
@@ -109,7 +109,7 @@ const _sms_lib = {
             const result = await MAIL_TRANS.sendMail({ 
                 from: k.from,
                 to: p,
-                subject: k.title,
+                subject: typeof k.title === 'function' ? k.title(v) : k.title,
                 html: typeof k.template === 'function' ? k.template(v) : k.template,
                 envelope: {
                     from: k.from,
@@ -184,6 +184,12 @@ module.exports = (app) => ({
     },
     verify: async function (p, v) {
         const cached = await app.cache.get(p);
+
+        // clear cache if the code is correct
+        if (cached === v) {
+            await app.cache.del(p);
+        }
+        
         return cached === v;
     }
 })

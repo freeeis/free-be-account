@@ -855,12 +855,16 @@ module.exports = (app) => ({
                                     {
                                         // 'Profile.WxOpenId': wxResult.openid,
                                         ...openidFilter,
-                                        Enabled: true,
-                                        Deleted: false,
+                                        // Enabled: true,
+                                        // Deleted: false,
                                     }).then((user) => {
                                         if (user) {
-                                            user.isWx = true;
-                                            done(null, user);
+                                            if (!user.Enabled || user.Deleted) {
+                                                done(null, false);
+                                            } else {
+                                                user.isWx = true;
+                                                done(null, user);
+                                            }
                                         } else {
                                             // create new 
                                             const profile = {};
@@ -900,8 +904,8 @@ module.exports = (app) => ({
                             {
                                 $or: [{ PhoneNumber: username }, { UserName: username }],
                                 // Password: password,
-                                Enabled: true,
-                                Deleted: false,
+                                // Enabled: true,
+                                // Deleted: false,
                             }).then(async (user) => {
                                 if (!user) { 
                                     // auto create new user
@@ -941,10 +945,14 @@ module.exports = (app) => ({
                                     }
                                 }
 
+                                if (!user.Enabled || user.Deleted) {
+                                    return done(null, false);
+                                }
+
                                 const pwdVerified = verifyPassword(password, user.Password, m.config.pwdEncryptMethod || 'md5');
 
-                                return Promise.resolve(app.cache.get(username)).then((cachePwd) => {
-                                    if (!pwdVerified && cachePwd !== password) {
+                                return Promise.resolve(app.modules['sms'].verify(username, cachePwd)).then((cachePwd) => {
+                                    if (!pwdVerified && !cachePwd) {
                                         return done(null, false); 
                                     } else {
                                         return done(null, user);
