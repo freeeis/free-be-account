@@ -1223,7 +1223,14 @@ module.exports = (app) => ({
                         }
                     }
 
-                    const result = await m.sms.sendRandom(phone, m.config.smsFormat || undefined, true, req.body.smsTemp || 'register');
+                    let result;
+                    try {
+                        result = await m.sms.sendRandom(phone, m.config.smsFormat || undefined, true, req.body.smsTemp || 'register');
+                    } catch (ex) {
+                        app.logger.error(ex.message);
+                        res.makeError(504, ex.message || 'Failed to send sms!', m);
+                        return next('route');
+                    }
 
                     if (!result) {
                         res.makeError(500, 'Failed to send sms!', m);
