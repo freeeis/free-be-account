@@ -9,16 +9,16 @@
   },
   "dependencies": {
     "@alicloud/pop-core": "^1.7.13",
-    "axios": "^1.6.8",
+    "axios": "^1.7.7",
     "bcrypt": "^5.1.1",
     "connect-redis": "^7.1.1",
     "crypto-js": "^4.2.0",
     "express-session": "^1.18.1",
-    "js-md5": "^0.7.3",
-    "nodemailer": "^6.9.13",
-    "passport": "^0.6.0",
+    "js-md5": "^0.8.3",
+    "nodemailer": "^6.9.16",
+    "passport": "^0.7.0",
     "passport-local": "^1.0.0",
     "svg-captcha": "^1.4.0",
-    "uuid": "^9.0.1"
+    "uuid": "^11.0.2"
   }
 }
