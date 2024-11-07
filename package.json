@@ -15,10 +15,13 @@
     "crypto-js": "^4.2.0",
     "express-session": "^1.18.1",
     "js-md5": "^0.8.3",
+    "minimatch": "^10.0.1",
     "nodemailer": "^6.9.16",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
+    "semver": "^7.6.3",
     "svg-captcha": "^1.4.0",
+    "tar": "^7.4.3",
     "uuid": "^11.0.2"
   }
 }
