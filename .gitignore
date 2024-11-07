@@ -9,3 +9,5 @@ nohup.out
 /config/config.bundle.js
 /bin/www_bundle.js
 /modules/bundle
+
+.DS_Store
