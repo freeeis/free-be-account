@@ -90,6 +90,9 @@ router.get('/', async (req, res, next) => {
                     }
                 }
             }
+
+            doc.Profile = doc.Profile || {};
+            doc.Profile.Name = doc.Profile.Name || doc.UserName || '';
         }
     }
 }));

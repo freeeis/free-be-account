@@ -182,11 +182,11 @@ module.exports = (app) => ({
         let v = _generateMSG(f);
         return await this.send(p, v, c, t);
     },
-    verify: async function (p, v) {
+    verify: async function (p, v, del) {
         const cached = await app.cache.get(p);
 
         // clear cache if the code is correct
-        if (cached === v) {
+        if (del && cached === v) {
             await app.cache.del(p);
         }
         

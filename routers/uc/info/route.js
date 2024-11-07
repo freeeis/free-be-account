@@ -91,12 +91,12 @@ router.post('/submit',
 
         if (router.mdl.config.accountRequireAudit) {
             res.locals.body.Status = router.mdl.AccountAuditStatus.Auditing;
-        }
 
-        // set to default permission 
-        const p = router.mdl.config.accountDefaultPermissions;
-        res.app.modules.account.utils.clearPermission(p);
-        res.locals.body.Permission = p;
+            // set to default permission 
+            const p = router.mdl.config.accountDefaultPermissions;
+            res.app.modules.account.utils.clearPermission(p);
+            res.locals.body.Permission = p;
+        }
 
         res.locals.filter = { id: req.user.id };
         res.locals.fields = [

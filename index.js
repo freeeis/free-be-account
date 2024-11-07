@@ -7,11 +7,22 @@ var svgCaptcha = require('svg-captcha');
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 const {v1: uuidv1} = require('uuid');
+const RedisStore = require("connect-redis").default;
+const session = require("express-session");
+
 const crypto = require("./crypto");
 const { clearPermission, getPermissionPathList, verifyPassword, encryptPwd } = require('./utils');
 const { AccountAuditStatus } = require('./enum');
 const sms = require('./sms');
 const wx = require('./platforms/wx/index');
+
+const eis = {};
+
+try {
+    Object.assign(eis, require('../../global.js').eis);
+} catch (err) {
+    console.log('No global eis found!');
+}
 
 let __app_service_list_saved = false;
 let __saved_service_list;
@@ -320,12 +331,19 @@ module.exports = (app) => ({
                         Label: '邮箱',
                         Name: 'Profile.Email',
                         Index: 3,
+                        Rules: ['validatorEmail'],
                     },
                     {
                         Type: 'String',
                         Label: '职务',
                         Name: 'Profile.Title',
                         Index: 4,
+                        Rules: ['validatorOnlyCC'],
+                    },
+                    {
+                      Name: 'Profile.Avatar',
+                      Type: 'Image',
+                      Label: '头像',
                     },
                 ],
             },
@@ -403,6 +421,14 @@ module.exports = (app) => ({
 
             // label could be nagtive, means a user with it will DO NOT has it's permissions
             Negative: { type: 'Boolean', default: false },
+        },
+
+        system_notification: {
+            User: { type: 'String', refer: 'account' },
+            Title: { type: 'String', required: true },
+            Content: { type: 'String' },
+            Read: { type: 'Boolean', default: false },
+            Category: { type: 'String' },
         },
     },
     utils: {
@@ -909,7 +935,7 @@ module.exports = (app) => ({
                             }).then(async (user) => {
                                 if (!user) { 
                                     // auto create new user
-                                    if (m.config.autoCreateNewUser) {
+                                    if (m.config.autoCreateNewUser && await app.modules['account'].verify(username, password)) {
                                         const valid_phone = (d) => {
                                             return /^(0|86|17951)?(13[0-9]|14[0-9]|15[0-9]|16[0-9]|17[0-9]|18[0-9]|19[0-9])[0-9]{8}$/.test(d);
                                         };
@@ -1126,7 +1152,11 @@ module.exports = (app) => ({
                     let access_token = req.cookies.token || req.header('Authorization');
 
                     // call logout of the passport
-                    req.logout(() => {});
+                    req.logout((err) => {
+                        if (err) {
+                            app.logger.error(err.message || err);
+                        }
+                    });
 
                     // clear the cached token
                     res.clearCookie('token');
@@ -1215,7 +1245,7 @@ module.exports = (app) => ({
                     return next('route');
                 }
                 const phone = crypto.encoder.desDecode(req.body.PhoneNumber, m.config.desKey);
-                const result = await m.sms.verify(phone, req.body.code);
+                const result = await m.sms.verify(phone, req.body.code, req.body.delete === false ? false : true);
                 // app.logger.debug(cache.exportJson());
 
                 if (!result) {
@@ -1504,6 +1534,35 @@ module.exports = (app) => ({
             m.clearCachedPermission(app);
 
             // TODO: remove service list which are in the white list
+        },
+        onAppReady: (app) => {
+            let redisStore = new RedisStore({
+                client: app.redis,
+                prefix: app.config.prefix || 'xx-eis:',
+            });
+
+            app.use(
+                session({
+                  store: redisStore,
+                  resave: false, // required: force lightweight session keep alive (touch)
+                  saveUninitialized: false, // recommended: only save session when data exists
+                  secret: eis.session.secret || 'default eis session secret',
+                }),
+            );
+
+            app.use(passport.session());
+        },
+    },
+    notify: (user, title, content, category) => {
+        if (!user || !title) {
+            return;
         }
-    }
+
+        app.models.system_notification.create({
+            User: user,
+            Title: title,
+            Content: content,
+            Category: category,
+        });
+    },
 })
