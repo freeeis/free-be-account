@@ -977,7 +977,7 @@ module.exports = (app) => ({
 
                                 const pwdVerified = verifyPassword(password, user.Password, m.config.pwdEncryptMethod || 'md5');
 
-                                return Promise.resolve(app.modules['sms'].verify(username, cachePwd)).then((cachePwd) => {
+                                return Promise.resolve(app.modules['account'].sms.verify(username, cachePwd)).then((cachePwd) => {
                                     if (!pwdVerified && !cachePwd) {
                                         return done(null, false); 
                                     } else {
