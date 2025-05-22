@@ -49,7 +49,9 @@ function clearPermission(perm) {
             }
         });
 
-        // TODO: add a field if nothing here, otherwise the db will not save it??? should be fixed!!
+        // add a field if nothing here, otherwise the db will not save it??? should be fixed!!
+        // fixed by disabling the minimize option in mongoose, but we still should add this field
+        // so we can indicate whether the account has this permission clearly
         if (Object.keys(p).length <= 0) {
             p.has = true;
         }
