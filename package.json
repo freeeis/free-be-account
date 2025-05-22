@@ -8,8 +8,8 @@
     "url": "https://github.com/freeeis/free-be-account.git"
   },
   "dependencies": {
-    "@alicloud/pop-core": "^1.7.13",
-    "axios": "^1.7.7",
+    "@alicloud/pop-core": "^1.8.0",
+    "axios": "^1.9.0",
     "bcrypt": "^5.1.1",
     "connect-redis": "^7.1.1",
     "crypto-js": "^4.2.0",
@@ -19,9 +19,9 @@
     "nodemailer": "^6.9.16",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
-    "semver": "^7.6.3",
+    "semver": "^7.7.2",
     "svg-captcha": "^1.4.0",
     "tar": "^7.4.3",
-    "uuid": "^11.0.2"
+    "uuid": "^11.1.0"
   }
 }
