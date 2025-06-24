@@ -79,7 +79,7 @@ router.post('/',
             }
         }
 
-        req.body.Path = `${parent ? parent.Path + '/' : ''}${req.body.Name}`
+        req.body.Path = `${parent ? parent.Path : ''}/${req.body.Name}`
         req.body.BuiltIn = false;
 
         return next();
