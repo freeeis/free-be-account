@@ -1139,6 +1139,7 @@ module.exports = (app) => ({
 
                     res.addData({
                         Name: (req.user.Profile && req.user.Profile.Name) || req.user.PhoneNumber || req.user.UserName || '',
+                        Account: req.user.PhoneNumber || req.user.UserName,
                         Avatar: req.user.Profile && req.user.Profile.Avatar ? req.user.Profile.Avatar : '',
                         Status: req.user.Status,
                     }, false);
