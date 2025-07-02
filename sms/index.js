@@ -66,7 +66,18 @@ const _sms_lib = {
             });
 
             var codeAndValue = {};
-            codeAndValue[k.templateParamName] = v;
+            // codeAndValue[k.templateParamName] = v;
+
+            if (Array.isArray(k.templateParamName)) {
+                for (let i = 0; i < k.templateParamName.length; i += 1) {
+                    const paramName = k.templateParamName[i];
+                    if (paramName && v && v[paramName]) {
+                        codeAndValue[paramName] = v[paramName];
+                    }
+                }
+            } else {
+                codeAndValue[k.templateParamName] = v;
+            }
 
             var params = {
                 "PhoneNumbers": p,
