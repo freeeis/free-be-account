@@ -27,7 +27,7 @@ try {
 let __app_service_list_saved = false;
 let __saved_service_list;
 
-const __getServiceList = async (res, filter = { Enabled: true }) => {
+const __getServiceList = async (res, filter = { Enabled: true }, scopeFilter) => {
     // add app.serviceList into db if not yet
     if (!__app_service_list_saved) {
         await res.app.modules.account.utils.saveServiceList(res.app);
@@ -36,7 +36,7 @@ const __getServiceList = async (res, filter = { Enabled: true }) => {
         return __saved_service_list;
     }
 
-    const allPerms = await res.app.models.permission.find(filter);
+    const allPerms = await res.app.models.permission.find(filter).lean();
 
     const permList = {};
     if (allPerms && allPerms.length > 0) {
@@ -58,18 +58,39 @@ const __getServiceList = async (res, filter = { Enabled: true }) => {
                         Description: doc.Description,
                         Index: doc.Index,
                     },
-                    // TODO: only add data scope when no filter provided, correct?
-                    filter ? {} : {
-                        Scope: filter ? undefined: doc.Scope.map(sc => {
-                            const dso = res.app.getContainerContent('DataScope').find(ds => ds.Name === sc.Name);
-                            return dso ? {
+                    ((doc.Scope || []).length <= 0) ? {} : {
+                        Scope: doc.Scope.map(sc => {
+                            const dso = app.getContainerContent('DataScope').find(ds => ds.Name === sc.Name);
+
+                            if (!dso) {
+                                return {};
+                            }
+                            
+                            // the final scope options
+                            let scopeOptions = [];
+
+                            if (!scopeFilter) {
+                                scopeOptions = dso.Options;
+                            } else {
+                                // get the scope filter of the current doc
+                                const scopeFilterOfTheCurrentDoc = (scopeFilter && scopeFilter[doc.Path]) || {};
+                                // get the option level of the filter
+                                const filterOptionValue = scopeFilterOfTheCurrentDoc[sc.Name] || dso.Default;
+                                const filterOption = dso.Options.find(o => o.Value === filterOptionValue);
+
+                                if (filterOption && (filterOption.Level !== void 0)) {
+                                    scopeOptions = dso.Options.filter(o => (o.Level !== void 0) && (o.Level <= filterOption.Level));
+                                }
+                            }
+
+                            return {
                                 Label: dso.Label || '',
                                 Field: `${sc.Name}`,
                                 Type: dso.Component || 'Select',
-                                Options: dso.Options || [],
+                                Options: scopeOptions || [],
                                 Multiple: dso.Multiple || false,
-                            } : {};
-                        })
+                            };
+                        }),
                     })
                 }
             }
@@ -637,14 +658,17 @@ module.exports = (app) => ({
                     {
                         Label: mdl.t('Self'),
                         Value: 'self',
+                        Level: 1, // Level越大，越高权限
                     },
                     {
                         Label: mdl.t('My Org'),
                         Value: 'org',
+                        Level: 10,
                     },
                     {
                         Label: mdl.t('All'),
                         Value: 'all',
+                        Level: 20,
                     }
                 ],
                 Default: 'self',
@@ -1452,12 +1476,22 @@ module.exports = (app) => ({
                     }
 
                     let filter;
+                    let scopeFilter = {};
                     if (req.user.Permission !== '*') {
                         const permPathList = getPermissionPathList(req.user.Permission);
                         filter = { Path: { $in: permPathList } };
+
+                        for (let i = 0; i < permPathList.length; i += 1) {
+                            const p = permPathList[i];
+                            const pScope = Object.nestValue(req.user.Permission, p.replace(/^\//,'').replace(/\//g, '.'));
+
+                            if (pScope && pScope.Scope) {
+                                scopeFilter[p] = pScope.Scope;
+                            }
+                        }
                     }
 
-                    res.addData(await __getServiceList(res, filter));
+                    res.addData(await __getServiceList(res, filter, scopeFilter));
 
                     return next();
                 },

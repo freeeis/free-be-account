@@ -128,7 +128,7 @@ router.get('/:id',
 );
 
 router.post('/', 
-    (req, res, next) => {
+    async (req, res, next) => {
         req.body.Status = AccountAuditStatus.Passed;
         req.body.Saved = true;
 
@@ -144,7 +144,58 @@ router.post('/',
         // make sure the provided permission is in the scope of the current user permission!!
         if(req.user.Permission){
             if(req.user.Permission !== '*') {
+                // 根据当前账号的权限，检查所传入的权限中的数据权限配置是否合理，
+                // 如果合理，将传入的数据权限保存，并合并到最后的权限中
+                const permPathList = router.mdl.utils.getPermissionPathList(req.body.Permission);
+                const allPerms = await res.app.models.permission.find({ 
+                    Path: { $in: permPathList } , 
+                    Enabled: true 
+                }).lean();
+
+                const dsScope = {};
+                for (let i = 0; i < allPerms.length; i += 1) {
+                    const p = allPerms[i].Path;
+                    const pDot = p.replace(/^\//, '').replace(/\//g, '.');
+                    const uPerm = Object.nestValue(req.user.Permission, pDot);
+                    const bPerm = Object.nestValue(req.body.Permission, pDot);
+
+                    if (uPerm && uPerm.Scope && bPerm && bPerm.Scope) {
+                        // 当前账号此权限中的数据权限定义
+                        for (let j = 0; j < (allPerms[i].Scope || []).length; j += 1) {
+                            const sc = allPerms[i].Scope[j];
+
+                            if (!uPerm.Scope[sc.Name] || !bPerm.Scope[sc.Name]) {
+                                continue;
+                            }
+
+                            const dso = res.app.getContainerContent('DataScope').find(ds => ds.Name === sc.Name);
+
+                            if (dso) {
+                                const dsoOptions = dso.Options || [];
+
+                                const dsOpOfCurrentUser = dsoOptions.find(o => o.Value === uPerm.Scope[sc.Name]);
+                                const dsOpInBody = dsoOptions.find(o => o.Value === bPerm.Scope[sc.Name]);
+
+                                if (dsOpOfCurrentUser 
+                                    && dsOpInBody
+                                ) {
+                                    if (
+                                        (dsOpOfCurrentUser.Level !== void 0) 
+                                        && (dsOpInBody.Level !== void 0)
+                                        && (dsOpInBody.Level <= dsOpOfCurrentUser.Level)
+                                    ) {
+                                        Object.setValue(dsScope, `${pDot}.Scope.${sc.Name}`, dsOpInBody.Value);
+                                    } else {
+                                        Object.setValue(dsScope, `${pDot}.Scope.${sc.Name}`, dsOpOfCurrentUser.Value);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 req.body.Permission = Object.intersection(req.body.Permission, req.user.Permission);
+                Object.assign(req.body.Permission, dsScope);
             }
         } else {
             delete req.body.Permission;
@@ -215,7 +266,7 @@ router.post('/audit',
 );
 
 router.put('/',
-    (req, res, next) => {
+    async (req, res, next) => {
         if (req.body.Permission) {
             if (!clearPermission(req.body.Permission)) {
                 req.body.Permission = {};
@@ -228,7 +279,58 @@ router.put('/',
         // make sure the provided permission is in the scope of the current user permission!!
         if(req.user.Permission){
             if(req.user.Permission !== '*') {
+                // 根据当前账号的权限，检查所传入的权限中的数据权限配置是否合理，
+                // 如果合理，将传入的数据权限保存，并合并到最后的权限中
+                const permPathList = router.mdl.utils.getPermissionPathList(req.body.Permission);
+                const allPerms = await res.app.models.permission.find({ 
+                    Path: { $in: permPathList } , 
+                    Enabled: true 
+                }).lean();
+
+                const dsScope = {};
+                for (let i = 0; i < allPerms.length; i += 1) {
+                    const p = allPerms[i].Path;
+                    const pDot = p.replace(/^\//, '').replace(/\//g, '.');
+                    const uPerm = Object.nestValue(req.user.Permission, pDot);
+                    const bPerm = Object.nestValue(req.body.Permission, pDot);
+
+                    if (uPerm && uPerm.Scope && bPerm && bPerm.Scope) {
+                        // 当前账号此权限中的数据权限定义
+                        for (let j = 0; j < (allPerms[i].Scope || []).length; j += 1) {
+                            const sc = allPerms[i].Scope[j];
+
+                            if (!uPerm.Scope[sc.Name] || !bPerm.Scope[sc.Name]) {
+                                continue;
+                            }
+
+                            const dso = res.app.getContainerContent('DataScope').find(ds => ds.Name === sc.Name);
+
+                            if (dso) {
+                                const dsoOptions = dso.Options || [];
+
+                                const dsOpOfCurrentUser = dsoOptions.find(o => o.Value === uPerm.Scope[sc.Name]);
+                                const dsOpInBody = dsoOptions.find(o => o.Value === bPerm.Scope[sc.Name]);
+
+                                if (dsOpOfCurrentUser 
+                                    && dsOpInBody
+                                ) {
+                                    if (
+                                        (dsOpOfCurrentUser.Level !== void 0) 
+                                        && (dsOpInBody.Level !== void 0)
+                                        && (dsOpInBody.Level <= dsOpOfCurrentUser.Level)
+                                    ) {
+                                        Object.setValue(dsScope, `${pDot}.Scope.${sc.Name}`, dsOpInBody.Value);
+                                    } else {
+                                        Object.setValue(dsScope, `${pDot}.Scope.${sc.Name}`, dsOpOfCurrentUser.Value);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 req.body.Permission = Object.intersection(req.body.Permission, req.user.Permission);
+                Object.assign(req.body.Permission, dsScope);
             }
         } else {
             delete req.body.Permission;
