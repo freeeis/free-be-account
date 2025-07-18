@@ -3,6 +3,9 @@ const path = require('path');
 const AliyunCore = require('@alicloud/pop-core');
 const nodemailer = require('nodemailer');
 
+const submail = require('./platforms/submail');
+const tencent = require('./platforms/tencent');
+
 let global;
 
 if (fs.existsSync(path.resolve(__dirname, '../../../global.js'))) {
@@ -117,7 +120,7 @@ const _sms_lib = {
                 }
             });
 
-            const result = await MAIL_TRANS.sendMail({ 
+            const result = await MAIL_TRANS[k.mail].sendMail({ 
                 from: k.from,
                 to: p,
                 subject: typeof k.title === 'function' ? k.title(v) : k.title,
@@ -132,6 +135,8 @@ const _sms_lib = {
             return result && result.accepted && result.accepted.length >= 1;
         }
     },
+    submail,
+    tencent,
 }
 
 module.exports = (app) => ({
@@ -148,7 +153,7 @@ module.exports = (app) => ({
         
         // const keys = (global && global.sms && global.sms[t]) || app.modules.account.config.sms.keys[t] || app.modules.account.config.sms.keys;
         
-        if (keys.platform) {
+        if (keys && keys.platform) {
             // should not send too frequent!
             const lastSentTime = await app.cache.get(`${p}_lastSentTime`);
             if (lastSentTime && (Date.now() - lastSentTime) < (keys.resentGap || (60 * 1000))) {
@@ -193,7 +198,7 @@ module.exports = (app) => ({
         let v = _generateMSG(f);
         return await this.send(p, v, c, t);
     },
-    verify: async function (p, v, del) {
+    verify: async function (p, v, del = true) {
         const cached = await app.cache.get(p);
 
         // clear cache if the code is correct
