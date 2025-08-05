@@ -7,7 +7,7 @@ var svgCaptcha = require('svg-captcha');
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 const {v1: uuidv1} = require('uuid');
-const RedisStore = require("connect-redis").default;
+const { RedisStore } = require("connect-redis");
 const session = require("express-session");
 
 const crypto = require("./crypto");
