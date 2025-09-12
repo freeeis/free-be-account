@@ -466,10 +466,8 @@ module.exports = (app) => ({
         let user;
 
         // 用来做第三方集成身份认证的字段
-        let userid = req.body.UserId || req.header('UserId');
         let appid = req.body.AppId || req.header('AppId');
         let ts = req.body.Timestamp || req.header('Timestamp');
-        // md5(JSON.stringify({Timestamp:xxx, UserId: xxx, UserSecret:xxx }))
         let sign = req.body.Sign || req.header('Sign');
 
         if (cacheData.type === 'wx') {
@@ -478,22 +476,25 @@ module.exports = (app) => ({
         } else if (cacheData.type === 'pwd') {
             // login with username/email/phone and password
             user = await req.app.models['account'].findOne({ id, Enabled: true, Deleted: false });
-        } else if (userid && appid && sign && ts) {
+        } else if (appid && sign && ts) {
             // 第三方系统集成
-            const tmpUser = await req.app.models['account'].findOne({ id: userid, Enabled: true, Deleted: false });
+            const tmpUser = await req.app.models['account'].findOne({ id: appid, Enabled: true, Deleted: false });
 
             if (!tmpUser) {
                 return false;
             }
 
-            const tmpSign = crypto.MD5(JSON.stringify({
-                Timestamp: ts,
-                UserId: userid,
-                UserSecret: tmpUser.Secret
-            }));
+            const tmpSign = crypto.MD5(`${appid}${ts}${tmpUser.Secret}`);
 
             if (tmpSign !== sign) {
-                req.app.logger.debug('user: ' + userid + ',sign: ' + sign + ',ts:' + ts + ',realSign: ' + tmpSign);
+                req.app.logger.debug('user: ' + appid + ',sign: ' + sign + ',ts:' + ts + ',realSign: ' + tmpSign);
+                return false;
+            }
+
+            // 请求时间不能超过5分钟，且不能比当前时间大于10秒钟
+            const now = Date.now();
+            if (((now - ts) > 5 * 60 * 1000 )|| ((ts - now) > 10 * 1000)) {
+                req.app.logger.debug('user: ' + appid + ',sign: ' + sign + ',ts:' + ts + ',now: ' + now);
                 return false;
             }
 
@@ -510,8 +511,7 @@ module.exports = (app) => ({
             // 更新时间戳
             tmpUser.LastCallTimestamp = ts;
             await tmpUser.save();
-        }
-        else {
+        } else {
             return false;
         }
 
