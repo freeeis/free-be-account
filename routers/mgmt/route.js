@@ -113,7 +113,8 @@ router.get('/:id',
             'Org',
             'Status',
             'Permission',
-            'Labels'
+            'Labels',
+            'Secret',
         ];
         
         return next();
@@ -206,6 +207,9 @@ router.post('/',
             const password = crypto.encoder.desDecode(req.body.Password, router.mdl.config.desKey);
             req.body.Password = encryptPwd(password, router.mdl.config.pwdEncryptMethod || 'md5');
         }
+
+        // 随机生成appKey
+        req.body.Secret = crypto.randomPassword(32);
 
         return next();
     },
