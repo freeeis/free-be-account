@@ -39,11 +39,14 @@ module.exports = {
             codeAndValue[k.templateParamName] = v;
         }
 
+        const tsResponse = await client.get('/service/timestamp');
+        const ts = (tsResponse && tsResponse.data && tsResponse.data.timestamp) || Math.floor(Date.now() / 1000);
+        
         const requestBody = {
             appid: k.appid,          // 在 SUBMAIL 应用集成中创建的短信应用 ID
             to: p,                   // 收件人手机号码
             project: k.templateCode, // 模版 ID
-            timestamp: Math.floor(Date.now() / 1000),   // Timestamp UNIX 时间戳
+            timestamp: `${ts}`,      // Timestamp UNIX 时间戳
             sign_type: 'md5',        // md5 or sha1 or normal
             sign_version: 2,         // signature 加密计算方式(当 sign_version 传 2 时，vars 参数不参与加密计算)
         };
@@ -66,5 +69,42 @@ module.exports = {
         }).catch(() => {
             return false;
         });
-    }
+    },
+    sendMail: async function (k, p, v) {
+        if (!k || !k.appid || !k.appkey) {
+            throw new Error('Email parameters not configured correctly for platform (Submail)');
+        }
+
+        const tsResponse = await client.get('/service/timestamp');
+        const ts = (tsResponse && tsResponse.data && tsResponse.data.timestamp) || Math.floor(Date.now() / 1000);
+        
+        const requestBody = {
+            appid: k.appid,          // 在 SUBMAIL 应用集成中创建的邮件应用 ID
+            from: k.from,                // 发件人邮箱地址
+            to: p,                       // 收件人邮箱地址
+            timestamp: `${ts}`,               // Timestamp UNIX 时间戳
+            sign_type: 'md5',            // md5 or sha1 or normal
+            sign_version: 2,             // signature 加密计算方式(当 sign_version 传 2 时，vars 参数不参与加密计算)
+        };
+
+        const signature = sign(k.appid, k.appkey, requestBody);
+
+        return await client.post('/mail/send', {
+            ...requestBody,
+            subject: typeof k.title === 'function' ? k.title(v) : k.title,         // 邮件标题
+            html: typeof k.template === 'function' ? k.template(v) : k.template,   // 邮件 HTML 内容
+            signature,                   // 应用密匙或数字签名
+        }).then(({data}) => {
+            if (data.status === 'success') {
+                return true;
+            } else {
+                console.error('Email send error:', data.msg);
+            }
+
+            return false;            
+        }).catch((error) => {
+            console.error('Email send exception:', error);
+            return false;
+        });
+    },
 };

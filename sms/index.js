@@ -136,6 +136,9 @@ const _sms_lib = {
         }
     },
     submail,
+    submail_mail: {
+        send: submail.sendMail,
+    },
     tencent,
 }
 
