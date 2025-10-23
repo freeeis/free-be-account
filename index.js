@@ -1106,7 +1106,12 @@ module.exports = (app) => ({
                 // update token in cookies
                 const token = req.cookies.token;
                 if (token) {
-                    res.cookie('token', token, { maxAge: app.config['cookieTimeout'] });
+                    res.cookie('token', token, {
+                        httpOnly: true,     // 防止 XSS 读取
+                        secure: true,       // 仅 HTTPS 传输
+                        sameSite: 'strict', // CSRF 防护
+                        maxAge: app.config['cookieTimeout'],
+                    });
                 }
 
                 // check for force reset pwd
@@ -1159,7 +1164,12 @@ module.exports = (app) => ({
                         token = await generate_new_access_token_pwd(app, req.user.id, access_token, null, req.user.isWx);
                     }
 
-                    res.cookie('token', token, { maxAge: app.config['cookieTimeout'] });
+                    res.cookie('token', token, {
+                        httpOnly: true,     // 防止 XSS 读取
+                        secure: true,       // 仅 HTTPS 传输
+                        sameSite: 'strict', // CSRF 防护
+                        maxAge: app.config['cookieTimeout'],
+                    });
 
                     res.addData({
                         Name: (req.user.Profile && req.user.Profile.Name) || req.user.PhoneNumber || req.user.UserName || '',
