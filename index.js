@@ -959,7 +959,7 @@ module.exports = (app) => ({
                             }).then(async (user) => {
                                 if (!user) { 
                                     // auto create new user
-                                    if (m.config.autoCreateNewUser && await app.modules['account'].verify(username, password)) {
+                                    if (m.config.autoCreateNewUser && await app.modules['account'].sms.verify(username, password)) {
                                         const valid_phone = (d) => {
                                             return /^(0|86|17951)?(13[0-9]|14[0-9]|15[0-9]|16[0-9]|17[0-9]|18[0-9]|19[0-9])[0-9]{8}$/.test(d);
                                         };
