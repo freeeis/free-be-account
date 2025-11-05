@@ -451,6 +451,13 @@ module.exports = (app) => ({
             Read: { type: 'Boolean', default: false },
             Category: { type: 'String' },
         },
+
+        // 静态资源访问权限控制
+        staticResourcePermissionControl: {
+            ResourcePath: { type: 'String', required: true, unique: true }, // 资源路径
+            Referers: { type: 'String' },    // 逗号分割的字符串，每一个代表一个允许访问的来源
+            Permissions: { type: 'String' }, // 逗号分割的字符串，每一个代表一个api路径
+        },
     },
     utils: {
         verify_api_permission,
@@ -1560,6 +1567,102 @@ module.exports = (app) => ({
             }
         },
         onRoutersReady: async (app, m) => {
+            // file uploads
+            app.post(
+                `${app.config.baseUrl}/upload`,
+                async (req, res, next) => {
+                    if (!res.locals.data?.id) return next();
+                    if (!req.body?.perms && !req.body?.refs) return next();
+
+                    // save the permission control info
+                    await app.models.staticResourcePermissionControl.create({
+                        ResourcePath: res.locals.data.id,
+                        Permissions: req.body.perms || '',
+                        Referers: req.body.refs || '',
+                    })
+        
+                    return next();
+                }
+            );
+
+            // 静态资源身份验证
+            async function checkPerm (req) {
+                // 验证是静态资源请求
+                const assetsPath = req.originalUrl;
+                if (!assetsPath || !assetsPath.startsWith(app.config.assetsUrlPrefix)) {
+                    return false;
+                }
+
+                // 获取当前资源的权限控制
+                const assetsFilePath = assetsPath.replace(app.config.assetsUrlPrefix, '').split(/[\\|/]/g).slice(-2).join('/');
+                const assetsPerm = await app.models.staticResourcePermissionControl.findOne({ ResourcePath: assetsFilePath }).lean();
+
+                // 如果没有保存对应的权限控制，说明是公开资源
+                if (!assetsPerm) {
+                    return true;
+                }
+
+                // 验证referer。并不完全可靠，但能防一部分无脑盗链
+                // 配置可能太复杂，所以先不需要
+                const neededReferer = assetsPerm.Referers || ''; // '/admin/f/case/690976ea5fee11cbc1e8d19a/[0-9]+,/admin/f/case/690976ea5fee11cbc1e8d19a/2/edit';
+
+                if (!req.user?.id) {
+                    return false;
+                }
+
+                // check referrer
+                const referer = req.get('Referer') || '';
+                let refererPath = '/';
+                try {
+                    const urlObj = new URL(referer);
+                    refererPath = urlObj.pathname;
+                } catch (ex) {
+                    refererPath = '/';
+                }
+
+                if (!refererPath || refererPath === '/') {
+                    return false;
+                }
+
+                const refererMatched = /^\/pdfjs(_.+)?\/web\/viewer.html$/.test(refererPath) || neededReferer.split(/,|，/).map((nr) => new RegExp(nr)).some((reg) => reg.test(refererPath));
+
+                if (!refererMatched) {
+                    return false;
+                }
+
+                // 验证host。并不完全可靠，但能防一部分无脑盗链
+                const host = req.get('Host') || '';
+
+                if (!host || (app.config.host !== `host` && app.config.host !== `https://${host}` && app.config.host !== `http://${host}`)) {
+                    return false;
+                }
+
+                // 验证权限
+                const neededPerms = assetsPerm.Permissions || '';
+                if (!neededPerms) {
+                    return true;
+                }
+
+                const permList = neededPerms.split(/,|，/) || [];
+                let hasPerm = false;
+                for (let i = 0; i < permList.length; i += 1) {
+                    const p = permList[i];
+                    if (verify_api_permission(req.app, m, req.user, p)) {
+                        hasPerm = true;
+                        break;
+                    }
+                }
+
+                return hasPerm;
+            }
+            app.use(`/assets`, async (req, res, next) => {
+                if (await checkPerm(req)) {
+                    return next()
+                } else {
+                    res.status(404).end();
+                }
+            });
+
             // create default user if it's an empty db
             if (await m.models['account'].countDocuments({}) <= 0) {
                 // let perms = app.ctx.serviceList()
