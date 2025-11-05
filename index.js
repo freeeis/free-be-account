@@ -454,7 +454,10 @@ module.exports = (app) => ({
 
         // 静态资源访问权限控制
         staticResourcePermissionControl: {
-            ResourcePath: { type: 'String', required: true, unique: true }, // 资源路径
+            User: { type: 'String', refer: 'account', required: true }, // 创建用户
+            ResourcePath: { type: 'String', index: true, required: true, unique: true }, // 资源路径
+
+            Users: { type: 'String' },       // 逗号分割的字符串，每一个代表一个允许访问的用户ID, self代表资源创建者本人
             Referers: { type: 'String' },    // 逗号分割的字符串，每一个代表一个允许访问的来源
             Permissions: { type: 'String' }, // 逗号分割的字符串，每一个代表一个api路径
         },
@@ -1572,13 +1575,17 @@ module.exports = (app) => ({
                 `${app.config.baseUrl}/upload`,
                 async (req, res, next) => {
                     if (!res.locals.data?.id) return next();
-                    if (!req.body?.perms && !req.body?.refs) return next();
+                    if (!req.body?.perms && !req.body?.refs && !req.body?.users) return next();
 
                     // save the permission control info
+                    const assetsFilePath = res.locals.data?.id.split(/[\\|/]/g).slice(-2).join('/');
                     await app.models.staticResourcePermissionControl.create({
-                        ResourcePath: res.locals.data.id,
-                        Permissions: req.body.perms || '',
-                        Referers: req.body.refs || '',
+                        User: req.user?.id,
+                        ResourcePath: assetsFilePath,
+
+                        Users: req.body?.users || '',
+                        Permissions: req.body?.perms || '',
+                        Referers: req.body?.refs || '',
                     })
         
                     return next();
@@ -1598,17 +1605,13 @@ module.exports = (app) => ({
                 const assetsPerm = await app.models.staticResourcePermissionControl.findOne({ ResourcePath: assetsFilePath }).lean();
 
                 // 如果没有保存对应的权限控制，说明是公开资源
-                if (!assetsPerm) {
+                if (!assetsPerm || (!assetsPerm.Users && !assetsPerm.Permissions && !assetsPerm.Referers)) {
                     return true;
                 }
 
                 // 验证referer。并不完全可靠，但能防一部分无脑盗链
                 // 配置可能太复杂，所以先不需要
-                const neededReferer = assetsPerm.Referers || ''; // '/admin/f/case/690976ea5fee11cbc1e8d19a/[0-9]+,/admin/f/case/690976ea5fee11cbc1e8d19a/2/edit';
-
-                if (!req.user?.id) {
-                    return false;
-                }
+                const neededReferer = assetsPerm.Referers || '';
 
                 // check referrer
                 const referer = req.get('Referer') || '';
@@ -1637,13 +1640,38 @@ module.exports = (app) => ({
                     return false;
                 }
 
+                // 验证用户
+                const neededUsers = assetsPerm.Users || '';
+                if (neededUsers) {
+                    if (!req.user?.id) return false;
+
+                    const userList = neededUsers.split(/,|，/) || [];
+                    let userMatched = false;
+                    for (let i = 0; i < userList.length; i += 1) {
+                        const u = userList[i];
+                        if ((u.toLowerCase() === 'self' && req.user.id === assetsPerm.User.toString()) || req.user.id === u) {
+                            userMatched = true;
+                            break;
+                        }
+                    }
+
+                    if (!userMatched) {
+                        return false;
+                    }
+                }
+
                 // 验证权限
                 const neededPerms = assetsPerm.Permissions || '';
-                if (!neededPerms) {
+                const permList = neededPerms.split(/,|，/) || [];
+                if (permList.length <= 0) {
                     return true;
                 }
 
-                const permList = neededPerms.split(/,|，/) || [];
+                // 验证权限列表
+                if (!req.user?.id) {
+                    return false;
+                }
+
                 let hasPerm = false;
                 for (let i = 0; i < permList.length; i += 1) {
                     const p = permList[i];
