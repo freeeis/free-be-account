@@ -1662,7 +1662,7 @@ module.exports = (app) => ({
                 // 验证host。并不完全可靠，但能防一部分无脑盗链
                 const host = req.get('Host') || '';
 
-                if (!host || (app.config.host !== `host` && app.config.host !== `https://${host}` && app.config.host !== `http://${host}`)) {
+                if (!host || (app.config.host !== host && app.config.host !== `https://${host}` && app.config.host !== `http://${host}`)) {
                     return false;
                 }
 
