@@ -1041,10 +1041,33 @@ module.exports = (app) => ({
                     const uuid = uuidv1();
 
                     res.app.cache.put(`captcha_${uuid}`, captcha.text, m.config.captcha.cache || 300000);
-                    const matches = captcha.data.match(/d="([^"]*)"/g);
+
+                    const pathAndStrokeList = [];
+                    // 1. 先把每个 <path .../> 整体拎出来
+                    const pathRE = /<path\b[^>]*\/>/gi;
+
+                    // 2. 对每个标签再抽属性（顺序无关，可缺）
+                    const attrRE = /\b(d|stroke|fill)=["']([^"']*)["']/gi;
+
+                    let pathMatch;
+
+                    while ((pathMatch = pathRE.exec(captcha.data)) !== null) {
+                        const obj = { p: undefined, s: undefined, f: undefined };
+                        let attrMatch;
+                        attrRE.lastIndex = 0;          // 重置内层正则
+                        while ((attrMatch = attrRE.exec(pathMatch[0])) !== null) {
+                            const [, key, val] = attrMatch;
+                            if (key === 'd')      obj.p = val;
+                            if (key === 'stroke') obj.s = val;
+                            if (key === 'fill')   obj.f = val;
+                        }
+                        
+                        pathAndStrokeList.push(obj);
+                    }
 
                     res.endWithData({
-                        captcha: matches.map((m) => m.replace('d="', '').replace('"', '')),
+                        captcha: pathAndStrokeList,
+                        f: m.config.captcha.options.background,
                         id: uuid,
                     });
                 }
