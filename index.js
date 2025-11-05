@@ -1591,6 +1591,32 @@ module.exports = (app) => ({
                     return next();
                 }
             );
+            // multiple files upload
+            app.post(
+                `${app.config.baseUrl}/uploads`,
+                async (req, res, next) => {
+                    if (!res.locals.data?.length) return next();
+                    if (!req.body?.perms && !req.body?.refs && !req.body?.users) return next();
+
+                    // save the permission control info
+                    for (let i = 0; i < res.loals.data.length; i += 1) {
+                        const resi = res.locals.data[i];
+                        if (!resi?.id) continue;
+
+                        const assetsFilePath = resi?.id.split(/[\\|/]/g).slice(-2).join('/');
+                        await app.models.staticResourcePermissionControl.create({
+                            User: req.user?.id,
+                            ResourcePath: assetsFilePath,
+
+                            Users: req.body?.users || '',
+                            Permissions: req.body?.perms || '',
+                            Referers: req.body?.refs || '',
+                        })
+                    }
+        
+                    return next();
+                }
+            );
 
             // 静态资源身份验证
             async function checkPerm (req) {
