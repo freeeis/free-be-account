@@ -210,6 +210,38 @@ async function saveServiceList (app, clean=false) {
     await checkService(serviceList, undefined, '');
 }
 
+/**
+ * 给指定的静态资源文件添加权限控制记录
+ * 
+ * @param {String or Array} assets asset file(s)
+ * @param {String or Object} user The current user
+ * @param {String} users Users
+ * @param {String} perms Permissions
+ * @param {String} refs Referers
+ * @returns
+ */
+async function addPermControlToAssetFiles(afile, user, users, perms, refs) {
+    if (!afile) return;
+
+    if (!Array.isArray(afile)) {
+        afile = [afile];
+    }
+
+    for (let i = 0; i < afile.length; i += 1) {
+        const af = afile[i];
+
+        const assetsFilePath = af.split(/[\\|/]/g).slice(-2).join('/');
+        await app.models.staticResourcePermissionControl.create({
+            User: user?.id || user,
+            ResourcePath: assetsFilePath,
+
+            Users: users || '',
+            Permissions: perms || '',
+            Referers: refs || '',
+        });
+    }
+}
+
 module.exports = {
     clearPermission,
     getPermissionPathList,
@@ -218,4 +250,5 @@ module.exports = {
     getClearPwd,
     crypto,
     saveServiceList,
+    addPermControlToAssetFiles,
 }
