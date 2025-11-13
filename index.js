@@ -60,7 +60,7 @@ const __getServiceList = async (res, filter = { Enabled: true }, scopeFilter) =>
                     },
                     ((doc.Scope || []).length <= 0) ? {} : {
                         Scope: doc.Scope.map(sc => {
-                            const dso = app.getContainerContent('DataScope').find(ds => ds.Name === sc.Name);
+                            const dso = res.app.getContainerContent('DataScope').find(ds => ds.Name === sc.Name);
 
                             if (!dso) {
                                 return {};
