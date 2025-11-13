@@ -27,16 +27,15 @@ try {
 let __app_service_list_saved = false;
 let __saved_service_list;
 
-const __getServiceList = async (res, filter = { Enabled: true }, scopeFilter) => {
+const __getServiceList = async (res, filter, scopeFilter) => {
     // add app.serviceList into db if not yet
     if (!__app_service_list_saved) {
         await res.app.modules.account.utils.saveServiceList(res.app);
-        __app_service_list_saved = true;
-    } else if (!filter){
+    } else if (!filter) {
         return __saved_service_list;
     }
 
-    const allPerms = await res.app.models.permission.find(filter).lean();
+    const allPerms = await res.app.models.permission.find(filter ? { ...filter, Enabled: true } : { Enabled: true }).lean();
 
     const permList = {};
     if (allPerms && allPerms.length > 0) {
@@ -97,8 +96,9 @@ const __getServiceList = async (res, filter = { Enabled: true }, scopeFilter) =>
         })
     }
 
-    if (!filter) {
+    if (!filter && !__app_service_list_saved) {
         __saved_service_list = permList;
+        __app_service_list_saved = true;
     }
 
     return permList;
