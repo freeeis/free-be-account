@@ -4,26 +4,34 @@ const router = express.Router();
 const { AccountAuditStatus } = require('../../enum');
 const { clearPermission, encryptPwd, crypto } = require('../../utils');
 
+// 2024-7-4，曾经添加id过滤器，并删除所有label and placeholder，但为什么？
 const accountFilters = [
-    {
-        Name: 'id',
-        Type: 'String',
-        Info: {
-            Separate: true,
-        },
-    },
+    // {
+    //     Name: 'id',
+    //     Type: 'String',
+    //     Info: {
+    //         Separate: true,
+    //     },
+    //     Label: '账号ID',
+    // },
     {
         Name: 'LastUpdateDate',
         Type: 'DateRange',
+        Label: '更新日期',
+        Placeholder: '请选择',
     },
     {
         Name: 'Enabled',
         Type: 'Select',
+        Label: '激活状态',
+        Placeholder: '请选择',
         Options: [
             {
+                Label: '已激活',
                 Value: true,
             },
             {
+                Label: '未激活',
                 Value: false,
             },
         ],
@@ -31,18 +39,22 @@ const accountFilters = [
     {
         Name: 'Profile.Name',
         Type: 'String',
+        Label: '姓名',
     },
     {
         Name: 'Profile.Title',
         Type: 'String',
+        Label: '职务',
     },
     {
         Name: 'PhoneNumber',
         Type: 'String',
+        Label: '手机号',
     },
     {
         Name: 'UserName',
         Type: 'String',
+        Label: '用户名',
     },
 ];
 
