@@ -42,7 +42,12 @@ router.put('/', async (req, res, next) => {
     res.locals.filter = { id: user.id };
     // get new data from request (now only profile can be updated in uc)
     if (req.body.Profile) {
-        res.locals.body = { Profile: req.body.Profile };
+        res.locals.body = { 
+            Profile: {
+                ...user.Profile,
+                ...req.body.Profile,
+            } 
+        };
     } else {
         res.locals.body = { Enabled: user.Enabled };
     }
