@@ -1676,7 +1676,8 @@ module.exports = (app) => ({
                     return false;
                 }
 
-                const refererMatched = /^\/pdfjs(_.+)?\/web\/viewer.html$/.test(refererPath) || neededReferer.split(/,|，/).map((nr) => new RegExp(nr)).some((reg) => reg.test(refererPath));
+                const pdfjsReg = new RegExp(`^${app.config.frontendPublicPath || ''}\/pdfjs(_.+)?\/web\/viewer.html$`);
+                const refererMatched = pdfjsReg.test(refererPath) || neededReferer.split(/,|，/).map((nr) => new RegExp(nr)).some((reg) => reg.test(refererPath));
 
                 if (!refererMatched) {
                     return false;
