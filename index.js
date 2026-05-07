@@ -1199,7 +1199,7 @@ module.exports = (app) => ({
 
                     res.cookie('token', token, {
                         httpOnly: true,     // 防止 XSS 读取
-                        secure: true,       // 仅 HTTPS 传输
+                        secure: (m.config['secureCookie'] === false) ? false : true,       // 仅 HTTPS 传输
                         sameSite: 'strict', // CSRF 防护
                         maxAge: app.config['cookieTimeout'],
                     });
