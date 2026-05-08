@@ -58,4 +58,37 @@ router.put('/read/:id',
     router.UpdateDocument('system_notification'),
 );
 
+// read all 
+router.put('/read',
+    (req, res, next) => {
+        res.locals.filter = {
+            User: req.user.id,
+            Read: false,
+        };
+
+        res.locals.fields = [
+            'Read',
+        ]
+
+        res.locals.body = {
+            Read: true,
+        };
+
+        return next();
+    },
+    router.UpdateDocuments('system_notification'),
+);
+
+router.delete('/:id',
+    (req, res, next) => {
+        res.locals.filter = {
+            id: req.params.id,
+            User: req.user.id,
+        };
+
+        return next();
+    },
+    router.DeleteDocument('system_notification'),
+);
+
 module.exports = router;

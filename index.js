@@ -1791,7 +1791,7 @@ module.exports = (app) => ({
             return;
         }
 
-        app.models.system_notification.create({
+        return app.models.system_notification.create({
             User: user,
             Title: title,
             Content: content,
