@@ -60,23 +60,16 @@ router.put('/read/:id',
 
 // read all 
 router.put('/read',
-    (req, res, next) => {
-        res.locals.filter = {
+    async (req, res, next) => {
+        await res.app.models.system_notification.updateMany({
             User: req.user.id,
             Read: false,
-        };
-
-        res.locals.fields = [
-            'Read',
-        ]
-
-        res.locals.body = {
+        }, {
             Read: true,
-        };
+        });
 
         return next();
     },
-    router.UpdateDocuments('system_notification'),
 );
 
 router.delete('/:id',
