@@ -1170,7 +1170,7 @@ module.exports = (app) => ({
                     if (res._headerSent) return;
 
                     // check captcha
-                    if(m.config.captcha.login && !((req.body.password === 'wx' || req.body.password.startsWith('wx:')) && req.body.username.startsWith('wx:'))) {
+                    if(m.config.captcha.login && !res.locals.__ignore_login_captcha && !((req.body.password === 'wx' || req.body.password.startsWith('wx:')) && req.body.username.startsWith('wx:'))) {
                         const { captcha, id : cid } = req.body.captcha || {};
                         if (!captcha || !cid) {
                             res.makeError(400, 'Please provide captcha code!', m);
