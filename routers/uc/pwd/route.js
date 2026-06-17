@@ -36,7 +36,7 @@ router.put('/',
 
         res.locals.filter = { id: req.user.id };
         res.locals.fields = [
-            'password',
+            'Password',
         ];
 
         return next();
