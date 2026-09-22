@@ -14,6 +14,12 @@ if (fs.existsSync(path.resolve(__dirname, '../../../global.js'))) {
 
 let MAIL_TRANS = {};
 
+const isEmail = (value) => {
+    if (typeof value !== 'string') return false;
+
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+};
+
 function _generateMSG (f = '4n') {
     if (typeof f !== 'string' || f.length < 2) {
         f = '4n';
@@ -112,8 +118,8 @@ const _sms_lib = {
             MAIL_TRANS[k.mail] = MAIL_TRANS[k.mail] || nodemailer.createTransport({ 
                 host: k.host, 
                 secureConnection: true,
-                port: 465,
-                secure: true, 
+                port: k.port || 465,
+                secure: k.secure || ((k.port || 465) === 465),
                 auth: {
                     user: k.mail,
                     pass: k.secret,
@@ -144,7 +150,7 @@ const _sms_lib = {
 
 module.exports = (app) => ({
     send: async function (p, value, c = true, t = 'default') {
-        if (p.indexOf('@') > 0) {
+        if (isEmail(p)) {
             t = `${t}_mail`;
         }
 
